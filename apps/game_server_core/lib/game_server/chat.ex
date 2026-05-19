@@ -286,6 +286,15 @@ defmodule GameServer.Chat do
   # Access validation
   # ---------------------------------------------------------------------------
 
+  @doc "Returns `:ok` when user can access the chat conversation."
+  @spec authorize_access(integer(), String.t(), integer()) :: :ok | {:error, atom()}
+  def authorize_access(user_id, chat_type, chat_ref_id)
+      when is_integer(user_id) and is_binary(chat_type) and is_integer(chat_ref_id) do
+    validate_chat_access(user_id, %{chat_type: chat_type, chat_ref_id: chat_ref_id})
+  end
+
+  def authorize_access(_user_id, _chat_type, _chat_ref_id), do: {:error, :invalid_chat_ref}
+
   defp validate_chat_access(sender_id, %{"chat_type" => "lobby", "chat_ref_id" => lobby_id}) do
     validate_chat_access(sender_id, %{chat_type: "lobby", chat_ref_id: lobby_id})
   end
@@ -505,20 +514,51 @@ defmodule GameServer.Chat do
   @spec mark_read(integer(), String.t(), integer(), integer()) ::
           {:ok, ReadCursor.t()} | {:error, term()}
   def mark_read(user_id, chat_type, chat_ref_id, message_id) do
-    attrs = %{
-      chat_type: chat_type,
-      chat_ref_id: chat_ref_id,
-      last_read_message_id: message_id
-    }
+    with :ok <- authorize_access(user_id, chat_type, chat_ref_id),
+         :ok <- validate_read_message(user_id, chat_type, chat_ref_id, message_id) do
+      attrs = %{
+        chat_type: chat_type,
+        chat_ref_id: chat_ref_id,
+        last_read_message_id: message_id
+      }
 
-    %ReadCursor{user_id: user_id}
-    |> ReadCursor.changeset(attrs)
-    |> Repo.insert(
-      on_conflict: [
-        set: [last_read_message_id: message_id, updated_at: DateTime.utc_now(:second)]
-      ],
-      conflict_target: {:unsafe_fragment, "(user_id, chat_type, chat_ref_id)"}
-    )
+      %ReadCursor{user_id: user_id}
+      |> ReadCursor.changeset(attrs)
+      |> Repo.insert(
+        on_conflict: [
+          set: [last_read_message_id: message_id, updated_at: DateTime.utc_now(:second)]
+        ],
+        conflict_target: {:unsafe_fragment, "(user_id, chat_type, chat_ref_id)"}
+      )
+    end
+  end
+
+  defp validate_read_message(_user_id, _chat_type, _chat_ref_id, message_id)
+       when not is_integer(message_id),
+       do: {:error, :invalid_message}
+
+  defp validate_read_message(user_id, "friend", friend_id, message_id) do
+    case Repo.get(Message, message_id) do
+      %Message{chat_type: "friend", sender_id: ^user_id, chat_ref_id: ^friend_id} ->
+        :ok
+
+      %Message{chat_type: "friend", sender_id: ^friend_id, chat_ref_id: ^user_id} ->
+        :ok
+
+      nil ->
+        {:error, :message_not_found}
+
+      _message ->
+        {:error, :message_not_in_chat}
+    end
+  end
+
+  defp validate_read_message(_user_id, chat_type, chat_ref_id, message_id) do
+    case Repo.get(Message, message_id) do
+      %Message{chat_type: ^chat_type, chat_ref_id: ^chat_ref_id} -> :ok
+      nil -> {:error, :message_not_found}
+      _message -> {:error, :message_not_in_chat}
+    end
   end
 
   @doc """
@@ -595,39 +635,19 @@ defmodule GameServer.Chat do
   def count_unread_friends_batch(_user_id, []), do: %{}
 
   def count_unread_friends_batch(user_id, friend_ids) do
-    # Get all read cursors for friend chats at once
-    cursors =
-      from(c in ReadCursor,
-        where: c.user_id == ^user_id and c.chat_type == "friend" and c.chat_ref_id in ^friend_ids,
-        select: {c.chat_ref_id, c.last_read_message_id}
-      )
-      |> Repo.all()
-      |> Map.new()
-
-    # Count unread per friend: messages they sent to me after my last read
-    friend_ids
-    |> Enum.map(fn fid ->
-      query =
-        from(m in Message,
-          where: m.chat_type == "friend" and m.sender_id == ^fid and m.chat_ref_id == ^user_id
-        )
-
-      count =
-        case Map.get(cursors, fid) do
-          nil ->
-            Repo.aggregate(query, :count, :id)
-
-          last_id when is_integer(last_id) ->
-            from(m in query, where: m.id > ^last_id)
-            |> Repo.aggregate(:count, :id)
-
-          _ ->
-            Repo.aggregate(query, :count, :id)
-        end
-
-      {fid, count}
-    end)
-    |> Enum.reject(fn {_fid, count} -> count == 0 end)
+    from(m in Message,
+      left_join: c in ReadCursor,
+      on:
+        c.user_id == ^user_id and c.chat_type == "friend" and
+          c.chat_ref_id == m.sender_id,
+      where:
+        m.chat_type == "friend" and m.sender_id in ^friend_ids and
+          m.chat_ref_id == ^user_id,
+      where: is_nil(c.last_read_message_id) or m.id > c.last_read_message_id,
+      group_by: m.sender_id,
+      select: {m.sender_id, count(m.id)}
+    )
+    |> Repo.all()
     |> Map.new()
   end
 
@@ -640,37 +660,17 @@ defmodule GameServer.Chat do
   def count_unread_groups_batch(_user_id, []), do: %{}
 
   def count_unread_groups_batch(user_id, group_ids) do
-    cursors =
-      from(c in ReadCursor,
-        where: c.user_id == ^user_id and c.chat_type == "group" and c.chat_ref_id in ^group_ids,
-        select: {c.chat_ref_id, c.last_read_message_id}
-      )
-      |> Repo.all()
-      |> Map.new()
-
-    group_ids
-    |> Enum.map(fn gid ->
-      query =
-        from(m in Message,
-          where: m.chat_type == "group" and m.chat_ref_id == ^gid
-        )
-
-      count =
-        case Map.get(cursors, gid) do
-          nil ->
-            Repo.aggregate(query, :count, :id)
-
-          last_id when is_integer(last_id) ->
-            from(m in query, where: m.id > ^last_id)
-            |> Repo.aggregate(:count, :id)
-
-          _ ->
-            Repo.aggregate(query, :count, :id)
-        end
-
-      {gid, count}
-    end)
-    |> Enum.reject(fn {_gid, count} -> count == 0 end)
+    from(m in Message,
+      left_join: c in ReadCursor,
+      on:
+        c.user_id == ^user_id and c.chat_type == "group" and
+          c.chat_ref_id == m.chat_ref_id,
+      where: m.chat_type == "group" and m.chat_ref_id in ^group_ids,
+      where: is_nil(c.last_read_message_id) or m.id > c.last_read_message_id,
+      group_by: m.chat_ref_id,
+      select: {m.chat_ref_id, count(m.id)}
+    )
+    |> Repo.all()
     |> Map.new()
   end
 

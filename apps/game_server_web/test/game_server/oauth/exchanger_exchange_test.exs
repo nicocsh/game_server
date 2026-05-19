@@ -26,9 +26,14 @@ defmodule GameServer.OAuth.ExchangerExchangeTest do
     def post("https://appleid.apple.com/auth/token", opts) do
       case opts[:form] do
         %{code: "ok_code"} ->
-          payload = Jason.encode!(%{"sub" => "a1", "email" => "a@example.com"})
-          b64 = Base.url_encode64(payload, padding: false)
-          id_token = Enum.join(["h", b64, "s"], ".")
+          id_token =
+            apple_token(%{
+              "sub" => "a1",
+              "email" => "a@example.com",
+              "iss" => "https://appleid.apple.com",
+              "aud" => "cid",
+              "exp" => DateTime.utc_now() |> DateTime.add(300, :second) |> DateTime.to_unix()
+            })
 
           {:ok, %{status: 200, body: %{"id_token" => id_token}}}
 
@@ -132,10 +137,29 @@ defmodule GameServer.OAuth.ExchangerExchangeTest do
       end
     end
 
+    def get("https://appleid.apple.com/auth/keys") do
+      jwk = Application.fetch_env!(:game_server_core, :apple_test_jwk)
+      {_, public_jwk} = JOSE.JWK.to_public_map(jwk)
+
+      {:ok,
+       %{
+         status: 200,
+         body: %{"keys" => [Map.merge(public_jwk, %{"kid" => "test-key", "alg" => "RS256"})]}
+       }}
+    end
+
     # steam ticket POST handler moved to the grouped post/2 section
+
+    defp apple_token(claims) do
+      Application.fetch_env!(:game_server_core, :apple_test_jwk)
+      |> JOSE.JWT.sign(%{"alg" => "RS256", "kid" => "test-key"}, claims)
+      |> JOSE.JWS.compact()
+      |> elem(1)
+    end
   end
 
   setup do
+    Application.put_env(:game_server_core, :apple_test_jwk, JOSE.JWK.generate_key({:rsa, 2048}))
     Application.put_env(:game_server_core, :oauth_exchanger_client, TestClient)
     # Ensure a test steam api key and app id are available
     Application.put_env(:ueberauth, Ueberauth.Strategy.Steam, api_key: "testkey")
@@ -144,6 +168,7 @@ defmodule GameServer.OAuth.ExchangerExchangeTest do
     Application.put_env(:ueberauth, Ueberauth.Strategy.Steam, api_key: "testkey")
 
     on_exit(fn ->
+      Application.delete_env(:game_server_core, :apple_test_jwk)
       Application.delete_env(:game_server_core, :oauth_exchanger_client)
       Application.delete_env(:ueberauth, Ueberauth.Strategy.Steam)
       System.delete_env("STEAM_APP_ID")

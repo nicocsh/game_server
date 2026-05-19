@@ -6,6 +6,11 @@ defmodule GameServer.OAuth.Exchanger do
   Tests may replace the exchanger via application config for easier stubbing.
   """
 
+  @apple_jwks_url "https://appleid.apple.com/auth/keys"
+  @apple_issuer "https://appleid.apple.com"
+  @apple_allowed_algs ["RS256"]
+  @jwt_clock_skew_seconds 60
+
   @spec exchange_discord_code(String.t(), String.t(), String.t(), String.t(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def exchange_discord_code(code, client_id, client_secret, redirect_uri, _opts \\ []) do
@@ -168,15 +173,14 @@ defmodule GameServer.OAuth.Exchanger do
     case http_client().post(url, form: body, headers: headers) do
       {:ok, %{status: 200, body: %{"id_token" => id_token} = _body}} ->
         Logger.info("Apple OAuth: Successfully received id_token")
-        # Parse the JWT id_token to get user info
-        case parse_apple_id_token(id_token) do
+        # Validate the JWT id_token and extract user info
+        case parse_apple_id_token(id_token, audience: client_id) do
           {:ok, user_info} ->
             # If caller requested minimal data, just return subject/email (avoid extra work)
             if Keyword.get(opts, :fetch_profile, true) == false do
-              {:ok,
-               Map.take(user_info, ["sub", "email"] |> Enum.filter(&Map.has_key?(user_info, &1)))}
+              {:ok, Map.take(user_info, ["sub", "email"])}
             else
-              Logger.info("Apple OAuth: Successfully parsed user info: #{inspect(user_info)}")
+              Logger.info("Apple OAuth: Successfully validated id_token")
               {:ok, user_info}
             end
 
@@ -198,19 +202,34 @@ defmodule GameServer.OAuth.Exchanger do
     end
   end
 
-  # Parse Apple's JWT id_token to extract user information
+  # Validate Apple's JWT id_token and extract user information.
   @doc false
-  def parse_apple_id_token(id_token) do
-    # Use safe, non-raising operations and return {:ok, map} or {:error, reason}
-    case String.split(id_token, ".") do
-      [_header, payload, _signature] ->
-        padded_payload =
-          case rem(String.length(payload), 4) do
-            0 -> payload
-            n -> payload <> String.duplicate("=", 4 - n)
-          end
+  def parse_apple_id_token(id_token, opts \\ []) do
+    with {:ok, header} <- parse_jwt_part(id_token, 0),
+         :ok <- validate_apple_header(header),
+         {:ok, jwk} <- apple_jwk(header["kid"]),
+         {:ok, claims} <- verify_apple_jwt(id_token, jwk),
+         :ok <- validate_apple_claims(claims, opts) do
+      {:ok, claims}
+    else
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, "Invalid JWT token"}
+    end
+  end
 
-        with {:ok, decoded} <- Base.url_decode64(padded_payload),
+  @doc false
+  # Generic id_token parser usable for OpenID id_tokens across providers
+  defp parse_id_token(id_token) do
+    parse_jwt_part(id_token, 1)
+  end
+
+  defp parse_jwt_part(id_token, index) do
+    case String.split(id_token, ".") do
+      parts when length(parts) == 3 ->
+        part = Enum.at(parts, index)
+        padded = part <> String.duplicate("=", rem(4 - rem(String.length(part), 4), 4))
+
+        with {:ok, decoded} <- Base.url_decode64(padded),
              {:ok, parsed} <- Jason.decode(decoded) do
           {:ok, parsed}
         else
@@ -222,27 +241,115 @@ defmodule GameServer.OAuth.Exchanger do
     end
   end
 
-  @doc false
-  # Generic id_token parser usable for OpenID id_tokens across providers
-  defp parse_id_token(id_token) do
-    case String.split(id_token, ".") do
-      [_header, payload, _signature] ->
-        padded_payload =
-          case rem(String.length(payload), 4) do
-            0 -> payload
-            n -> payload <> String.duplicate("=", 4 - n)
-          end
+  defp validate_apple_header(%{"alg" => "RS256", "kid" => kid}) when is_binary(kid), do: :ok
+  defp validate_apple_header(_header), do: {:error, :invalid_header}
 
-        with {:ok, decoded} <- Base.url_decode64(padded_payload),
-             {:ok, parsed} <- Jason.decode(decoded) do
-          {:ok, parsed}
-        else
-          _ -> {:error, "Invalid JWT token"}
-        end
-
-      _ ->
-        {:error, "Invalid JWT token"}
+  defp apple_jwk(kid) do
+    with {:ok, keys} <- fetch_apple_jwks(),
+         %{} = jwk_map <- Enum.find(keys, &(Map.get(&1, "kid") == kid)) do
+      {:ok, JOSE.JWK.from_map(jwk_map)}
+    else
+      nil -> {:error, :unknown_key}
+      {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp fetch_apple_jwks do
+    case http_client().get(@apple_jwks_url) do
+      {:ok, %{status: 200, body: body}} ->
+        normalize_apple_jwks_body(body)
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, {:apple_jwks_failed, status, body}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp normalize_apple_jwks_body(%{"keys" => keys}) when is_list(keys), do: {:ok, keys}
+
+  defp normalize_apple_jwks_body(body) when is_binary(body) do
+    case Jason.decode(body) do
+      {:ok, %{"keys" => keys}} when is_list(keys) -> {:ok, keys}
+      _ -> {:error, :invalid_apple_jwks}
+    end
+  end
+
+  defp normalize_apple_jwks_body(_body), do: {:error, :invalid_apple_jwks}
+
+  defp verify_apple_jwt(id_token, jwk) do
+    case JOSE.JWT.verify_strict(jwk, @apple_allowed_algs, id_token) do
+      {true, %JOSE.JWT{fields: claims}, _jws} -> {:ok, claims}
+      _ -> {:error, :invalid_signature}
+    end
+  rescue
+    _ -> {:error, :invalid_signature}
+  end
+
+  defp validate_apple_claims(claims, opts) when is_map(claims) do
+    with :ok <- validate_apple_subject(claims["sub"]),
+         :ok <- validate_apple_issuer(claims["iss"]),
+         :ok <- validate_apple_audience(claims["aud"], apple_audiences(opts)),
+         :ok <- validate_apple_expiration(claims["exp"]),
+         :ok <- validate_apple_nonce(claims["nonce"], Keyword.get(opts, :nonce)) do
+      :ok
+    end
+  end
+
+  defp validate_apple_claims(_claims, _opts), do: {:error, :invalid_claims}
+
+  defp validate_apple_subject(sub) when is_binary(sub) and byte_size(sub) > 0, do: :ok
+  defp validate_apple_subject(_sub), do: {:error, :missing_subject}
+
+  defp validate_apple_issuer(@apple_issuer), do: :ok
+  defp validate_apple_issuer(_iss), do: {:error, :invalid_issuer}
+
+  defp validate_apple_audience(_aud, []), do: {:error, :missing_audience}
+
+  defp validate_apple_audience(aud, audiences) when is_binary(aud) do
+    if aud in audiences, do: :ok, else: {:error, :invalid_audience}
+  end
+
+  defp validate_apple_audience(aud, audiences) when is_list(aud) do
+    if Enum.any?(aud, &(&1 in audiences)), do: :ok, else: {:error, :invalid_audience}
+  end
+
+  defp validate_apple_audience(_aud, _audiences), do: {:error, :invalid_audience}
+
+  defp apple_audiences(opts) do
+    opts
+    |> Keyword.get(:audience, [
+      System.get_env("APPLE_WEB_CLIENT_ID"),
+      System.get_env("APPLE_IOS_CLIENT_ID")
+    ])
+    |> List.wrap()
+    |> Enum.reject(&(&1 in [nil, ""]))
+  end
+
+  defp validate_apple_expiration(exp) when is_integer(exp) do
+    now = DateTime.utc_now() |> DateTime.to_unix()
+
+    if exp > now - @jwt_clock_skew_seconds do
+      :ok
+    else
+      {:error, :expired}
+    end
+  end
+
+  defp validate_apple_expiration(exp) when is_binary(exp) do
+    case Integer.parse(exp) do
+      {int, ""} -> validate_apple_expiration(int)
+      _ -> {:error, :invalid_expiration}
+    end
+  end
+
+  defp validate_apple_expiration(_exp), do: {:error, :invalid_expiration}
+
+  defp validate_apple_nonce(_nonce, nil), do: :ok
+
+  defp validate_apple_nonce(nonce, expected_nonce) when is_binary(expected_nonce) do
+    if nonce == expected_nonce, do: :ok, else: {:error, :invalid_nonce}
   end
 
   # Helper to allow injecting a test HTTP client in tests. Defaults to Req.

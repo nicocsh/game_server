@@ -237,23 +237,31 @@ defmodule GameServerWeb.Api.V1.ChatController do
     page = parse_int(params["page"]) || 1
     page_size = min(parse_int(params["page_size"]) || 25, 100)
 
-    {messages, total_count} =
-      if chat_type == "friend" do
-        msgs = Chat.list_friend_messages(user_id, chat_ref_id, page: page, page_size: page_size)
-        total = Chat.count_friend_messages(user_id, chat_ref_id)
-        {msgs, total}
-      else
-        msgs = Chat.list_messages(chat_type, chat_ref_id, page: page, page_size: page_size)
-        total = Chat.count_messages(chat_type, chat_ref_id)
-        {msgs, total}
-      end
+    case authorize_conversation(conn, user_id, chat_type, chat_ref_id) do
+      :ok ->
+        {messages, total_count} =
+          if chat_type == "friend" do
+            msgs =
+              Chat.list_friend_messages(user_id, chat_ref_id, page: page, page_size: page_size)
 
-    count = length(messages)
+            total = Chat.count_friend_messages(user_id, chat_ref_id)
+            {msgs, total}
+          else
+            msgs = Chat.list_messages(chat_type, chat_ref_id, page: page, page_size: page_size)
+            total = Chat.count_messages(chat_type, chat_ref_id)
+            {msgs, total}
+          end
 
-    json(conn, %{
-      data: Enum.map(messages, &serialize_message/1),
-      meta: GameServerWeb.Pagination.meta(page, page_size, count, total_count)
-    })
+        count = length(messages)
+
+        json(conn, %{
+          data: Enum.map(messages, &serialize_message/1),
+          meta: GameServerWeb.Pagination.meta(page, page_size, count, total_count)
+        })
+
+      {:error, conn} ->
+        conn
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -295,6 +303,19 @@ defmodule GameServerWeb.Api.V1.ChatController do
           last_read_message_id: cursor.last_read_message_id,
           updated_at: cursor.updated_at
         })
+
+      {:error, reason} when reason in [:invalid_chat_ref, :invalid_chat_type, :invalid_message] ->
+        conn |> put_status(:bad_request) |> json(%{error: to_string(reason)})
+
+      {:error, reason}
+      when reason in [:not_in_lobby, :not_in_group, :not_friends, :not_in_party, :blocked] ->
+        conn |> put_status(:forbidden) |> json(%{error: to_string(reason)})
+
+      {:error, :message_not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "message_not_found"})
+
+      {:error, :message_not_in_chat} ->
+        conn |> put_status(:unprocessable_entity) |> json(%{error: "message_not_in_chat"})
 
       {:error, reason} ->
         conn |> put_status(:unprocessable_entity) |> json(%{error: to_string(reason)})
@@ -338,14 +359,20 @@ defmodule GameServerWeb.Api.V1.ChatController do
     chat_type = params["chat_type"]
     chat_ref_id = parse_int(params["chat_ref_id"])
 
-    count =
-      if chat_type == "friend" do
-        Chat.count_unread_friend(user_id, chat_ref_id)
-      else
-        Chat.count_unread(user_id, chat_type, chat_ref_id)
-      end
+    case authorize_conversation(conn, user_id, chat_type, chat_ref_id) do
+      :ok ->
+        count =
+          if chat_type == "friend" do
+            Chat.count_unread_friend(user_id, chat_ref_id)
+          else
+            Chat.count_unread(user_id, chat_type, chat_ref_id)
+          end
 
-    json(conn, %{unread_count: count})
+        json(conn, %{unread_count: count})
+
+      {:error, conn} ->
+        conn
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -462,6 +489,19 @@ defmodule GameServerWeb.Api.V1.ChatController do
       inserted_at: msg.inserted_at,
       updated_at: msg.updated_at
     }
+  end
+
+  defp authorize_conversation(conn, user_id, chat_type, chat_ref_id) do
+    case Chat.authorize_access(user_id, chat_type, chat_ref_id) do
+      :ok ->
+        :ok
+
+      {:error, reason} when reason in [:invalid_chat_ref, :invalid_chat_type] ->
+        {:error, conn |> put_status(:bad_request) |> json(%{error: to_string(reason)})}
+
+      {:error, reason} ->
+        {:error, conn |> put_status(:forbidden) |> json(%{error: to_string(reason)})}
+    end
   end
 
   defp parse_int(nil), do: nil

@@ -138,6 +138,34 @@ defmodule GameServer.PartiesTest do
       assert invite1.id == invite2.id
     end
 
+    test "can re-invite after previous invite was declined", %{leader: leader, member1: member1} do
+      {:ok, party} = Parties.create_party(leader, %{max_size: 4})
+      make_friends(leader, member1)
+
+      assert {:ok, invite1} = Parties.invite_to_party(leader, member1.id)
+      assert :ok = Parties.decline_party_invite(member1, party.id)
+      assert {:ok, invite2} = Parties.invite_to_party(leader, member1.id)
+
+      assert invite2.id != invite1.id
+      assert invite2.status == "pending"
+    end
+
+    test "can re-invite after previous invite was accepted and user left", %{
+      leader: leader,
+      member1: member1
+    } do
+      {:ok, party} = Parties.create_party(leader, %{max_size: 4})
+      make_friends(leader, member1)
+
+      assert {:ok, invite1} = Parties.invite_to_party(leader, member1.id)
+      assert {:ok, _party} = Parties.accept_party_invite(member1, party.id)
+      assert {:ok, :left} = Parties.leave_party(Accounts.get_user(member1.id))
+      assert {:ok, invite2} = Parties.invite_to_party(leader, member1.id)
+
+      assert invite2.id != invite1.id
+      assert invite2.status == "pending"
+    end
+
     test "stores sender_name and recipient_name in notification metadata", %{
       leader: leader,
       member1: member1

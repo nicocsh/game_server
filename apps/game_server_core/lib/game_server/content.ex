@@ -324,14 +324,20 @@ defmodule GameServer.Content do
   defp serve_asset(nil, _relative), do: nil
 
   defp serve_asset(base_dir, relative) do
-    # Prevent path traversal
-    clean = Path.expand(relative, base_dir)
+    base = Path.expand(base_dir)
+    clean = Path.expand(relative, base)
 
-    if String.starts_with?(clean, Path.expand(base_dir)) and File.regular?(clean) do
+    if inside_dir?(clean, base) and File.regular?(clean) do
       clean
     else
       nil
     end
+  end
+
+  defp inside_dir?(path, dir) do
+    path
+    |> Path.split()
+    |> List.starts_with?(Path.split(dir))
   end
 
   defp find_existing_file(paths) when is_list(paths) do

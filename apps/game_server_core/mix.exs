@@ -50,6 +50,7 @@ defmodule GameServerCore.MixProject do
       {:ueberauth_google, "~> 0.12"},
       {:ueberauth_facebook, "~> 0.10"},
       {:ueberauth_steam_strategy, "~> 0.1"},
+      {:jose, "~> 1.11"},
       {:guardian, "~> 2.3"},
       {:quantum, "~> 3.5"},
       {:corsica, "~> 2.0"},

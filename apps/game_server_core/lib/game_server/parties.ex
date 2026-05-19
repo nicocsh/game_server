@@ -333,7 +333,8 @@ defmodule GameServer.Parties do
          :ok <- check_not_blocked(leader.id, target_user_id),
          :ok <- check_leader_connected_to_target(leader.id, target_user_id),
          :ok <- check_no_pending_invite(leader.id, target_user_id),
-         :ok <- check_max_pending_invites(target_user_id) do
+         :ok <- check_max_pending_invites(target_user_id),
+         :ok <- delete_stale_invites(leader.id, target_user_id) do
       case %PartyInvite{}
            |> PartyInvite.changeset(%{
              party_id: party.id,
@@ -379,6 +380,17 @@ defmodule GameServer.Parties do
       other ->
         other
     end
+  end
+
+  defp delete_stale_invites(sender_id, recipient_id) do
+    from(i in PartyInvite,
+      where:
+        i.sender_id == ^sender_id and i.recipient_id == ^recipient_id and
+          i.status != "pending"
+    )
+    |> Repo.delete_all()
+
+    :ok
   end
 
   @doc """
