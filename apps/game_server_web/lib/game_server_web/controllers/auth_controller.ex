@@ -6,6 +6,7 @@ defmodule GameServerWeb.AuthController do
   plug Ueberauth, only: [:request, :callback], providers: [:steam]
 
   alias GameServer.Accounts
+  alias GameServer.Accounts.Scope
   alias GameServer.Accounts.User
   alias GameServer.OAuth.GoogleIDToken
   alias GameServer.OAuthSessions
@@ -17,19 +18,38 @@ defmodule GameServerWeb.AuthController do
 
   # ── Browser OAuth CSRF helpers ──────────────────────────────────────────
 
-  # Generate a random nonce, store it in the session, and return the state
-  # string to append to the OAuth authorization URL.
-  defp put_oauth_state(conn) do
+  # Generate a random state nonce and persist it server-side.
+  #
+  # Do not validate browser OAuth with Plug session cookies here. Apple uses
+  # response_mode=form_post, so its callback is a cross-site POST. With
+  # SameSite=Lax cookies, browsers can omit the session cookie on that POST,
+  # which makes session-backed state validation fail even when Apple auth
+  # succeeded. Server-side OAuthSession state is the source of truth.
+  defp put_oauth_state(conn, provider) do
     nonce = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
     state = @browser_state_prefix <> nonce
-    conn = Plug.Conn.put_session(conn, :oauth_state, nonce)
+    data = browser_oauth_state_data(conn)
+
+    {:ok, _session} =
+      OAuthSessions.create_session(state, %{
+        provider: provider,
+        status: "pending",
+        data: data
+      })
+
     {conn, state}
   end
+
+  defp browser_oauth_state_data(%{assigns: %{current_scope: %Scope{user: %User{id: user_id}}}}) do
+    %{browser: true, link_user_id: user_id}
+  end
+
+  defp browser_oauth_state_data(_conn), do: %{browser: true}
 
   # Classify an OAuth callback as :browser, :api, or :csrf_error.
   #
   # Returns:
-  #   {:browser, conn}           — validated browser CSRF nonce
+  #   {:browser, conn}           — validated browser state nonce
   #   {:api, session_id}         — valid OAuthSession for API polling flow
   #   {:csrf_error, conn}        — browser nonce mismatch or missing
   defp dispatch_oauth_state(conn, state) do
@@ -38,16 +58,8 @@ defmodule GameServerWeb.AuthController do
         # No state at all — could be a very old client. Reject for safety.
         {:csrf_error, conn}
 
-      @browser_state_prefix <> nonce ->
-        stored = Plug.Conn.get_session(conn, :oauth_state)
-
-        if stored != nil and Plug.Crypto.secure_compare(stored, nonce) do
-          # Clear the nonce so it can't be replayed
-          conn = Plug.Conn.delete_session(conn, :oauth_state)
-          {:browser, conn}
-        else
-          {:csrf_error, conn}
-        end
+      @browser_state_prefix <> _nonce = browser_state ->
+        dispatch_browser_oauth_state(conn, browser_state)
 
       session_id ->
         # Not a browser state — check if it's a valid API OAuthSession
@@ -61,6 +73,37 @@ defmodule GameServerWeb.AuthController do
         end
     end
   end
+
+  defp dispatch_browser_oauth_state(conn, browser_state) do
+    case OAuthSessions.get_session(browser_state) do
+      %{status: "pending"} = session ->
+        # Consume state once. Do not fall back to Plug session cookies for browser
+        # OAuth: Apple form_post callbacks can legitimately arrive without them.
+        _ = OAuthSessions.update_session(browser_state, %{status: "completed"})
+
+        conn = maybe_restore_browser_link_scope(conn, session)
+
+        {:browser, conn}
+
+      _ ->
+        {:csrf_error, conn}
+    end
+  end
+
+  defp maybe_restore_browser_link_scope(conn, %{data: %{} = data}) do
+    case Map.get(data, "link_user_id") || Map.get(data, :link_user_id) do
+      user_id when is_integer(user_id) ->
+        case Accounts.get_user(user_id) do
+          %User{} = user -> Plug.Conn.assign(conn, :current_scope, Scope.for_user(user))
+          _ -> conn
+        end
+
+      _ ->
+        conn
+    end
+  end
+
+  defp maybe_restore_browser_link_scope(conn, _session), do: conn
 
   # Optionally extract current user from JWT in Authorization header.
   # Returns {:ok, user} if valid JWT present, or {:ok, nil} if no JWT or invalid.
@@ -319,7 +362,7 @@ defmodule GameServerWeb.AuthController do
     base = GameServerWeb.endpoint().url()
     redirect_uri = cfg[:redirect_uri] || "#{base}/auth/discord/callback"
     scope = "identify email"
-    {conn, state} = put_oauth_state(conn)
+    {conn, state} = put_oauth_state(conn, "discord")
 
     url =
       "https://discord.com/oauth2/authorize?client_id=#{client_id}&redirect_uri=#{URI.encode_www_form(redirect_uri)}&response_type=code&scope=#{URI.encode_www_form(scope)}&state=#{URI.encode_www_form(state)}"
@@ -337,7 +380,7 @@ defmodule GameServerWeb.AuthController do
     base = GameServerWeb.endpoint().url()
     redirect_uri = cfg[:redirect_uri] || "#{base}/auth/google/callback"
     scope = "email profile"
-    {conn, state} = put_oauth_state(conn)
+    {conn, state} = put_oauth_state(conn, "google")
 
     url =
       "https://accounts.google.com/o/oauth2/v2/auth?client_id=#{client_id}&redirect_uri=#{URI.encode_www_form(redirect_uri)}&response_type=code&scope=#{URI.encode_www_form(scope)}&access_type=offline&state=#{URI.encode_www_form(state)}"
@@ -351,7 +394,7 @@ defmodule GameServerWeb.AuthController do
     base = GameServerWeb.endpoint().url()
     redirect_uri = cfg[:redirect_uri] || "#{base}/auth/facebook/callback"
     scope = "email"
-    {conn, state} = put_oauth_state(conn)
+    {conn, state} = put_oauth_state(conn, "facebook")
 
     url =
       "https://www.facebook.com/v18.0/dialog/oauth?client_id=#{client_id}&redirect_uri=#{URI.encode_www_form(redirect_uri)}&response_type=code&scope=#{URI.encode_www_form(scope)}&state=#{URI.encode_www_form(state)}"
@@ -368,7 +411,7 @@ defmodule GameServerWeb.AuthController do
     base = GameServerWeb.endpoint().url()
     redirect_uri = cfg[:redirect_uri] || "#{base}/auth/apple/callback"
     scope = "name email"
-    {conn, state} = put_oauth_state(conn)
+    {conn, state} = put_oauth_state(conn, "apple")
 
     url =
       "https://appleid.apple.com/auth/authorize?client_id=#{client_id}&redirect_uri=#{URI.encode_www_form(redirect_uri)}&response_type=code&response_mode=form_post&scope=#{URI.encode_www_form(scope)}&state=#{URI.encode_www_form(state)}"

@@ -85,32 +85,50 @@ defmodule GameServerWeb.Api.V1.KvController do
     case Hooks.internal_call(:before_kv_get, [key, %{user_id: user_id, lobby_id: lobby_id}],
            caller: caller
          ) do
-      {:ok, :public} ->
-        do_get(conn, key, user_id, lobby_id)
-
-      {:ok, :private} ->
-        # Use the resolved caller (from assigns or token) to decide permissions.
-        cond do
-          match?(%Scope{user: %{id: ^user_id}}, caller) ->
-            do_get(conn, key, user_id, lobby_id)
-
-          is_integer(lobby_id) and match?(%Scope{user: %{lobby_id: ^lobby_id}}, caller) ->
-            do_get(conn, key, user_id, lobby_id)
-
-          match?(%Scope{user: %{is_admin: true}}, caller) ->
-            do_get(conn, key, user_id, lobby_id)
-
-          true ->
-            conn |> put_status(:forbidden) |> json(%{error: "forbidden"})
+      {:ok, access} ->
+        if kv_access_allowed?(access, caller, user_id, lobby_id) do
+          do_get(conn, key, user_id, lobby_id)
+        else
+          forbidden(conn)
         end
 
       {:error, _reason} ->
-        conn |> put_status(:forbidden) |> json(%{error: "forbidden"})
+        forbidden(conn)
 
       _ ->
-        do_get(conn, key, user_id, lobby_id)
+        forbidden(conn)
     end
   end
+
+  defp kv_access_allowed?(:public, _caller, _user_id, _lobby_id), do: true
+
+  defp kv_access_allowed?(:owner_only, caller, user_id, _lobby_id),
+    do: caller_owns?(caller, user_id)
+
+  defp kv_access_allowed?(:lobby_members_only, caller, _user_id, lobby_id),
+    do: caller_in_lobby?(caller, lobby_id)
+
+  defp kv_access_allowed?(:owner_or_lobby_member, caller, user_id, lobby_id),
+    do: caller_owns?(caller, user_id) or caller_in_lobby?(caller, lobby_id)
+
+  defp kv_access_allowed?(:admin_only, caller, _user_id, _lobby_id), do: caller_admin?(caller)
+  defp kv_access_allowed?(:server_only, _caller, _user_id, _lobby_id), do: false
+  defp kv_access_allowed?(_access, _caller, _user_id, _lobby_id), do: false
+
+  defp caller_owns?(%Scope{user: %{id: caller_id}}, user_id),
+    do: is_integer(user_id) and caller_id == user_id
+
+  defp caller_owns?(_caller, _user_id), do: false
+
+  defp caller_in_lobby?(%Scope{user: %{lobby_id: caller_lobby_id}}, lobby_id),
+    do: is_integer(lobby_id) and caller_lobby_id == lobby_id
+
+  defp caller_in_lobby?(_caller, _lobby_id), do: false
+
+  defp caller_admin?(%Scope{user: %{is_admin: true}}), do: true
+  defp caller_admin?(_caller), do: false
+
+  defp forbidden(conn), do: conn |> put_status(:forbidden) |> json(%{error: "forbidden"})
 
   defp do_get(conn, key, user_id, lobby_id) do
     case KV.get(key, user_id: user_id, lobby_id: lobby_id) do

@@ -24,11 +24,30 @@ defmodule GameServer.Hooks do
 
   @type hook_result(attrs_or_user) :: {:ok, attrs_or_user} | {:error, term()}
 
+  @type kv_access ::
+          :public
+          | :owner_only
+          | :lobby_members_only
+          | :owner_or_lobby_member
+          | :admin_only
+          | :server_only
+
+  @type kv_access_result :: kv_access() | {:ok, kv_access()} | {:error, term()}
+
+  @kv_access_levels [
+    :public,
+    :owner_only,
+    :lobby_members_only,
+    :owner_or_lobby_member,
+    :admin_only,
+    :server_only
+  ]
+
   @typedoc """
   Options passed to hooks that accept an options map/keyword list.
 
-  Common keys include `:user_id` (pos_integer) and other domain-specific
-  options. Hooks may accept either a map or keyword list for convenience.
+  Common keys include `:user_id`, `:lobby_id`, and other domain-specific options.
+  Hooks may accept either a map or keyword list for convenience.
   """
   @type kv_opts :: map() | keyword()
 
@@ -112,13 +131,22 @@ defmodule GameServer.Hooks do
 
   @doc """
   Called before a KV `get/2` is performed. Implementations should return
-  `:public` if the key may be read publicly, or `:private` to restrict access.
+  one of these client KV API access decisions:
+
+  - `:public` — any authenticated client can read.
+  - `:owner_only` — only the caller matching the requested `user_id` can read.
+  - `:lobby_members_only` — only callers in the requested `lobby_id` can read.
+  - `:owner_or_lobby_member` — caller may match either requested `user_id` or `lobby_id`.
+  - `:admin_only` — only admins can read through the client KV API.
+  - `:server_only` — no client KV reads.
+
+  Server-side `GameServer.KV.get/2` calls are unaffected.
 
   Receives the `key` and an `opts` map/keyword (see `t:kv_opts/0`). Return
   either the bare atom (e.g. `:public`) or `{:ok, :public}`; return `{:error, reason}`
   to block the read.
   """
-  @callback before_kv_get(String.t(), kv_opts()) :: hook_result(:public | :private)
+  @callback before_kv_get(String.t(), kv_opts()) :: kv_access_result()
 
   @callback after_lobby_host_change(Lobby.t(), integer()) :: any()
 
@@ -180,10 +208,10 @@ defmodule GameServer.Hooks do
       MapSet.member?(scheduled, name) ->
         {:error, :disallowed}
 
-      # private functions (defp) are not exported and will be handled by
-      # function_exported?/3 => fall through to :not_implemented
+      # private functions (defp) are not exported and will fall through to
+      # :not_implemented.
 
-      not function_exported?(mod, name, arity) ->
+      not exports_function?(mod, name, arity) ->
         {:error, :not_implemented}
 
       true ->
@@ -263,7 +291,7 @@ defmodule GameServer.Hooks do
     mod = module()
     arity = length(args)
 
-    if function_exported?(mod, name, arity) do
+    if exports_function?(mod, name, arity) do
       try do
         case apply(mod, name, args) do
           :ok -> :ok
@@ -384,7 +412,7 @@ defmodule GameServer.Hooks do
     arity = length(args)
     args = normalize_hook_args(args)
 
-    if Enum.any?(mods, &function_exported?(&1, name, arity)) do
+    if Enum.any?(mods, &exports_function?(&1, name, arity)) do
       mods
       |> Enum.reduce_while(args, fn mod, current_args ->
         pipeline_step(mod, name, current_args, opts, timeout, arity)
@@ -401,7 +429,7 @@ defmodule GameServer.Hooks do
   defp pipeline_step(mod, name, current_args, opts, timeout, arity)
        when is_atom(mod) and is_atom(name) and is_list(current_args) and is_list(opts) and
               is_integer(timeout) and is_integer(arity) do
-    if function_exported?(mod, name, arity) do
+    if exports_function?(mod, name, arity) do
       mod
       |> safe_apply_raw(name, current_args, opts, timeout)
       |> handle_pipeline_apply_result(name, current_args)
@@ -557,7 +585,7 @@ defmodule GameServer.Hooks do
   defp run_fanout(mods, name, args, opts, timeout) do
     arity = length(args)
 
-    exporting_mods = Enum.filter(mods, &function_exported?(&1, name, arity))
+    exporting_mods = Enum.filter(mods, &exports_function?(&1, name, arity))
 
     case exporting_mods do
       [] ->
@@ -587,7 +615,8 @@ defmodule GameServer.Hooks do
   end
 
   defp run_before_kv_get(mods, args, opts, timeout) when is_list(mods) do
-    # Security-sensitive hook: default to :public, but any :private wins.
+    # Security-sensitive hook: default to :public. Multiple plugin decisions
+    # are intersected; incompatible restrictions fail closed to :server_only.
     # If any hook errors (timeout/exception), fail closed.
     mods
     |> Enum.reduce_while(:public, fn mod, decision ->
@@ -595,11 +624,8 @@ defmodule GameServer.Hooks do
       |> safe_apply_raw(:before_kv_get, args, opts, timeout)
       |> normalize_before_kv_get_result()
       |> case do
-        {:ok, :public} ->
-          {:cont, decision}
-
-        {:ok, :private} ->
-          {:cont, :private}
+        {:ok, access} ->
+          {:cont, combine_kv_access(decision, access)}
 
         {:error, reason} ->
           Logger.warning("Hooks.before_kv_get failed mod=#{inspect(mod)}: #{inspect(reason)}")
@@ -613,14 +639,25 @@ defmodule GameServer.Hooks do
     end
   end
 
+  defp combine_kv_access(:public, access), do: access
+  defp combine_kv_access(access, :public), do: access
+  defp combine_kv_access(:server_only, _access), do: :server_only
+  defp combine_kv_access(_access, :server_only), do: :server_only
+  defp combine_kv_access(access, access), do: access
+  defp combine_kv_access(:owner_or_lobby_member, :owner_only), do: :owner_only
+  defp combine_kv_access(:owner_only, :owner_or_lobby_member), do: :owner_only
+  defp combine_kv_access(:owner_or_lobby_member, :lobby_members_only), do: :lobby_members_only
+  defp combine_kv_access(:lobby_members_only, :owner_or_lobby_member), do: :lobby_members_only
+  defp combine_kv_access(_left, _right), do: :server_only
+
   defp normalize_before_kv_get_result({:error, reason}), do: {:error, reason}
   defp normalize_before_kv_get_result({:ok, {:error, reason}}), do: {:error, reason}
 
   defp normalize_before_kv_get_result({:ok, {:ok, decision}})
-       when decision in [:public, :private],
+       when decision in @kv_access_levels,
        do: {:ok, decision}
 
-  defp normalize_before_kv_get_result({:ok, decision}) when decision in [:public, :private],
+  defp normalize_before_kv_get_result({:ok, decision}) when decision in @kv_access_levels,
     do: {:ok, decision}
 
   defp normalize_before_kv_get_result({:ok, other}), do: {:error, {:invalid_return, other}}
@@ -668,7 +705,7 @@ defmodule GameServer.Hooks do
     default_mod = Default
     arity = length(args)
 
-    if function_exported?(default_mod, name, arity) do
+    if exports_function?(default_mod, name, arity) do
       case apply(default_mod, name, args) do
         {:ok, _} = ok -> ok
         {:error, _} = err -> err
@@ -686,6 +723,13 @@ defmodule GameServer.Hooks do
       end
     end
   end
+
+  defp exports_function?(mod, name, arity)
+       when is_atom(mod) and is_atom(name) and is_integer(arity) do
+    Code.ensure_loaded?(mod) and function_exported?(mod, name, arity)
+  end
+
+  defp exports_function?(_mod, _name, _arity), do: false
 
   # Helper: extract docs-based signatures into a map name -> %{arity => %{signature: sig, doc: doc_text}}
   defp doc_signatures_for(mod) do

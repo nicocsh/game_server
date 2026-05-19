@@ -1,6 +1,8 @@
 defmodule GameServerWeb.AuthControllerTest do
   use GameServerWeb.ConnCase, async: false
 
+  alias GameServer.Accounts
+  alias GameServer.AccountsFixtures
   alias GameServer.OAuthSessions
 
   test "request redirects to provider (discord)", %{conn: conn} do
@@ -289,9 +291,15 @@ defmodule GameServerWeb.AuthControllerTest do
       end
     end)
 
-    # browser flow
-    conn1 = post(conn, "/auth/apple/callback", %{"code" => "xxx"})
-    assert redirected_to(conn1) =~ "/"
+    # Browser flow: this intentionally posts with build_conn() instead of reusing
+    # auth_conn. Apple returns via cross-site form_post, so SameSite=Lax can omit
+    # the browser session cookie. Do not re-add a session-cookie fallback.
+    auth_conn = get(conn, "/auth/apple")
+    state = oauth_state_from_redirect(auth_conn)
+
+    conn1 = post(build_conn(), "/auth/apple/callback", %{"code" => "xxx", "state" => state})
+    assert redirected_to(conn1) == "/"
+    assert Phoenix.Flash.get(conn1.assigns.flash, :error) == nil
 
     # api flow with state
     session_id = "sid-#{System.unique_integer([:positive])}"
@@ -302,6 +310,90 @@ defmodule GameServerWeb.AuthControllerTest do
 
     session = OAuthSessions.get_session(session_id)
     assert session.status == "completed"
+  end
+
+  test "callback (apple) browser form_post works without callback session cookie", %{conn: conn} do
+    orig = Application.get_env(:game_server_web, :oauth_exchanger)
+    oauth_orig = Application.get_env(:ueberauth, Ueberauth.Strategy.Apple.OAuth)
+
+    System.put_env("APPLE_WEB_CLIENT_ID", "com.example.web")
+
+    Application.put_env(:ueberauth, Ueberauth.Strategy.Apple.OAuth,
+      client_id: "com.example.web",
+      client_secret: "dummy-secret"
+    )
+
+    defmodule TestExchanger.AppleNoCookie do
+      def exchange_apple_code(_code, _client_id, _secret, _redirect) do
+        {:ok, %{"sub" => "apple-no-cookie", "email" => "apple-no-cookie@example.com"}}
+      end
+    end
+
+    Application.put_env(:game_server_web, :oauth_exchanger, TestExchanger.AppleNoCookie)
+
+    on_exit(fn ->
+      Application.put_env(:game_server_web, :oauth_exchanger, orig)
+      Application.put_env(:ueberauth, Ueberauth.Strategy.Apple.OAuth, oauth_orig)
+    end)
+
+    auth_conn = get(conn, "/auth/apple")
+    state = oauth_state_from_redirect(auth_conn)
+    assert OAuthSessions.get_session(state).status == "pending"
+
+    callback_conn =
+      post(build_conn(), "/auth/apple/callback", %{"code" => "xxx", "state" => state})
+
+    assert redirected_to(callback_conn) == "/"
+    assert Phoenix.Flash.get(callback_conn.assigns.flash, :error) == nil
+    assert Accounts.get_user_by_apple_id("apple-no-cookie")
+    assert OAuthSessions.get_session(state).status == "completed"
+
+    # Server-side state is single-use. Session-cookie fallback would wrongly let
+    # browser callbacks depend on a cookie Apple cannot guarantee on form_post.
+    replay_conn = post(build_conn(), "/auth/apple/callback", %{"code" => "xxx", "state" => state})
+    assert redirected_to(replay_conn) =~ "/users/log-in"
+    assert Phoenix.Flash.get(replay_conn.assigns.flash, :error) =~ "Failed to authenticate"
+  end
+
+  test "callback (apple) browser link restores user from state without callback session cookie",
+       %{conn: conn} do
+    orig = Application.get_env(:game_server_web, :oauth_exchanger)
+    oauth_orig = Application.get_env(:ueberauth, Ueberauth.Strategy.Apple.OAuth)
+    user = AccountsFixtures.user_fixture()
+
+    System.put_env("APPLE_WEB_CLIENT_ID", "com.example.web")
+
+    Application.put_env(:ueberauth, Ueberauth.Strategy.Apple.OAuth,
+      client_id: "com.example.web",
+      client_secret: "dummy-secret"
+    )
+
+    defmodule TestExchanger.AppleLinkNoCookie do
+      def exchange_apple_code(_code, _client_id, _secret, _redirect) do
+        {:ok, %{"sub" => "apple-link-no-cookie", "email" => "link-no-cookie@example.com"}}
+      end
+    end
+
+    Application.put_env(:game_server_web, :oauth_exchanger, TestExchanger.AppleLinkNoCookie)
+
+    on_exit(fn ->
+      Application.put_env(:game_server_web, :oauth_exchanger, orig)
+      Application.put_env(:ueberauth, Ueberauth.Strategy.Apple.OAuth, oauth_orig)
+    end)
+
+    auth_conn =
+      conn
+      |> log_in_user(user)
+      |> get("/auth/apple")
+
+    state = oauth_state_from_redirect(auth_conn)
+
+    callback_conn =
+      post(build_conn(), "/auth/apple/callback", %{"code" => "xxx", "state" => state})
+
+    assert redirected_to(callback_conn) =~ "/users/settings"
+    assert Phoenix.Flash.get(callback_conn.assigns.flash, :error) == nil
+    assert Accounts.get_user!(user.id).apple_id == "apple-link-no-cookie"
   end
 
   test "callback (apple) error creates session with error status", %{conn: conn} do
@@ -347,6 +439,15 @@ defmodule GameServerWeb.AuthControllerTest do
 
     session = OAuthSessions.get_session(session_id)
     assert session.status == "error"
+  end
+
+  defp oauth_state_from_redirect(conn) do
+    conn
+    |> redirected_to()
+    |> URI.parse()
+    |> Map.fetch!(:query)
+    |> URI.decode_query()
+    |> Map.fetch!("state")
   end
 
   test "request redirects to provider (steam)", %{conn: conn} do

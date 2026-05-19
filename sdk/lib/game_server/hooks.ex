@@ -171,7 +171,7 @@ defmodule GameServer.Hooks do
   - `before_user_kicked/3` - Before user is kicked from lobby
   - `after_user_kicked/3` - After user is kicked from lobby
   - `after_lobby_host_change/2` - After lobby host changes
-  - `before_kv_get/2` - Called before a KV `get` to determine whether a key should be publicly readable (`:public`) or restricted (`:private`)
+  - `before_kv_get/2` - Called before a client KV `get` to return a KV access decision such as `:public`, `:owner_only`, or `:server_only`
 
     ## Custom RPC Functions
 
@@ -216,6 +216,17 @@ defmodule GameServer.Hooks do
   @typedoc "Result type for before hooks"
   @type hook_result(t) :: {:ok, t} | {:error, term()}
 
+  @typedoc "Client KV API access decision returned by `before_kv_get/2`."
+  @type kv_access ::
+          :public
+          | :owner_only
+          | :lobby_members_only
+          | :owner_or_lobby_member
+          | :admin_only
+          | :server_only
+
+  @type kv_access_result :: kv_access() | {:ok, kv_access()} | {:error, term()}
+
   @typedoc """
   A dynamic RPC export returned by `after_startup/0`.
 
@@ -238,8 +249,8 @@ defmodule GameServer.Hooks do
   @typedoc """
   Options passed to hooks that accept an options map/keyword list.
 
-  Common keys include `:user_id` (pos_integer) and other domain-specific
-  options. Hooks may accept either a map or keyword list for convenience.
+  Common keys include `:user_id`, `:lobby_id`, and other domain-specific options.
+  Hooks may accept either a map or keyword list for convenience.
   """
   @type kv_opts :: map() | keyword()
 
@@ -319,25 +330,46 @@ defmodule GameServer.Hooks do
               hook_result({user(), user(), lobby()})
   @callback after_user_kicked(host :: user(), target :: user(), lobby()) :: any()
 
-  @optional_callbacks before_group_create: 2, after_group_create: 1, before_group_join: 3,
-                     before_group_update: 2, after_group_update: 1,
-                     before_user_update: 2,
-                     after_group_join: 2, after_group_leave: 2, after_group_delete: 1, after_group_kick: 3,
-                     before_party_create: 2, after_party_create: 1,
-                     before_party_update: 2, after_party_update: 1,
-                     after_party_join: 2, after_party_leave: 2, after_party_kick: 3, after_party_disband: 1,
-                     after_achievement_unlocked: 2,
-                     before_chat_message: 2, after_chat_message: 1
+  @optional_callbacks before_group_create: 2,
+                      after_group_create: 1,
+                      before_group_join: 3,
+                      before_group_update: 2,
+                      after_group_update: 1,
+                      before_user_update: 2,
+                      after_group_join: 2,
+                      after_group_leave: 2,
+                      after_group_delete: 1,
+                      after_group_kick: 3,
+                      before_party_create: 2,
+                      after_party_create: 1,
+                      before_party_update: 2,
+                      after_party_update: 1,
+                      after_party_join: 2,
+                      after_party_leave: 2,
+                      after_party_kick: 3,
+                      after_party_disband: 1,
+                      after_achievement_unlocked: 2,
+                      before_chat_message: 2,
+                      after_chat_message: 1
 
   @doc """
   Called before a KV `get/2` is performed. Implementations should return
-  `:public` if the key may be read publicly, or `:private` to restrict access.
+  one of these client KV API access decisions:
+
+  - `:public` — any authenticated client can read.
+  - `:owner_only` — only the caller matching the requested `user_id` can read.
+  - `:lobby_members_only` — only callers in the requested `lobby_id` can read.
+  - `:owner_or_lobby_member` — caller may match either requested `user_id` or `lobby_id`.
+  - `:admin_only` — only admins can read through the client KV API.
+  - `:server_only` — no client KV reads.
+
+  Server-side `GameServer.KV.get/2` calls are unaffected.
 
   Receives the `key` and an `opts` map/keyword (see `t:kv_opts/0`). Return
   either the bare atom (e.g. `:public`) or `{:ok, :public}`; return `{:error, reason}`
   to block the read.
   """
-  @callback before_kv_get(String.t(), kv_opts()) :: hook_result(:public | :private)
+  @callback before_kv_get(String.t(), kv_opts()) :: kv_access_result()
 
   @callback after_lobby_host_change(lobby(), new_host_id :: integer()) :: any()
 
