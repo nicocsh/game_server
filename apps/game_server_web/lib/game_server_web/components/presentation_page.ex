@@ -515,12 +515,13 @@ defmodule GameServerWeb.PresentationPage do
   defp app_static_dir(_app), do: nil
 
   defp read_image_dimensions(file_path) do
-    with {:ok,
-          <<0x89, "PNG\r\n", 0x1A, "\n", _length::32, "IHDR", width::32, height::32, _::binary>>} <-
-           File.read(file_path) do
-      {width, height}
-    else
-      _ -> {nil, nil}
+    case File.read(file_path) do
+      {:ok,
+       <<0x89, "PNG\r\n", 0x1A, "\n", _length::32, "IHDR", width::32, height::32, _::binary>>} ->
+        {width, height}
+
+      _ ->
+        {nil, nil}
     end
   end
 
