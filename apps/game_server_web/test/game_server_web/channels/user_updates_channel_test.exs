@@ -30,7 +30,7 @@ defmodule GameServerWeb.UserChannelTest do
 
     assert_push "updated", payload
     assert payload.id == user.id
-    assert payload.lobby_id == lobby.id
+    assert payload.u.lobby_id == lobby.id
   end
 
   test "user channel receives updated event when leaving sets lobby_id to -1" do
@@ -51,13 +51,13 @@ defmodule GameServerWeb.UserChannelTest do
 
     assert_push "updated", joined_payload
     assert joined_payload.id == user.id
-    assert joined_payload.lobby_id == lobby.id
+    assert joined_payload.u.lobby_id == lobby.id
 
     assert {:ok, _} = GameServer.Lobbies.leave_lobby(joined_user)
 
     assert_push "updated", left_payload
     assert left_payload.id == user.id
-    assert left_payload.lobby_id == -1
+    assert left_payload.u.lobby_id == -1
   end
 
   test "join allowed for owner and receives broadcasts" do
@@ -69,13 +69,63 @@ defmodule GameServerWeb.UserChannelTest do
     assert Map.has_key?(socket.assigns, :current_scope)
     assert socket.assigns.current_scope.user.id == user.id
     {:ok, _, _socket} = subscribe_and_join(socket, "user:#{user.id}", %{})
+    assert_push "updated", _initial_payload
 
-    payload = %{id: user.id, metadata: %{"display_name" => "Updated"}}
+    payload =
+      user.id
+      |> GameServer.Accounts.get_user!()
+      |> Map.put(:metadata, %{"display_name" => "Updated"})
+      |> GameServer.Accounts.serialize_user_payload()
 
     GameServerWeb.endpoint().broadcast("user:#{user.id}", "updated", payload)
 
     # The test process receives the push
-    assert_push "updated", ^payload
+    assert_push "updated", delta_payload
+    assert delta_payload.id == user.id
+    assert delta_payload.u.metadata == %{"display_name" => "Updated"}
+    refute Map.has_key?(delta_payload, :metadata)
+  end
+
+  test "user channel sends nested metadata field delta after initial snapshot" do
+    user = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
+
+    {:ok, user} =
+      GameServer.Accounts.update_user(user, %{
+        metadata: %{
+          "word_match" => %{
+            Integer.to_string(user.id) => %{"points" => 10, "streak" => 2}
+          },
+          "invalid_until" => 500
+        }
+      })
+
+    {:ok, token, _claims} = Guardian.encode_and_sign(user)
+
+    {:ok, socket} = connect(GameServerWeb.UserSocket, %{"token" => token})
+    {:ok, _, _socket} = subscribe_and_join(socket, "user:#{user.id}", %{})
+
+    assert_push "updated", %{metadata: initial_metadata}
+    assert initial_metadata["invalid_until"] == 500
+
+    {:ok, _updated_user} =
+      GameServer.Accounts.update_user(user, %{
+        metadata: %{
+          "word_match" => %{
+            Integer.to_string(user.id) => %{"points" => 12, "streak" => 3}
+          }
+        }
+      })
+
+    assert_push "updated", payload
+    refute Map.has_key?(payload, :metadata)
+
+    assert payload.u.metadata == %{
+             "word_match" => %{
+               Integer.to_string(user.id) => %{"points" => 12, "streak" => 3}
+             }
+           }
+
+    assert payload.r.metadata == %{"invalid_until" => true}
   end
 
   test "user channel receives friend events for create & accept flows" do

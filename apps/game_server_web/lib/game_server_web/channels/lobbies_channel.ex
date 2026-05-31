@@ -11,6 +11,7 @@ defmodule GameServerWeb.LobbiesChannel do
   use Phoenix.Channel
 
   alias GameServer.Lobbies
+  alias GameServerWeb.PayloadDelta
 
   @impl true
   def join("lobbies", _payload, socket) do
@@ -26,14 +27,24 @@ defmodule GameServerWeb.LobbiesChannel do
 
   @impl true
   def handle_info({:lobby_created, lobby}, socket) do
-    push(socket, "lobby_created", serialize_lobby(lobby))
-    {:noreply, socket}
+    payload = serialize_lobby(lobby)
+    push(socket, "lobby_created", payload)
+    {:noreply, put_lobby_payload(socket, payload)}
   end
 
   @impl true
   def handle_info({:lobby_updated, lobby}, socket) do
-    push(socket, "lobby_updated", serialize_lobby(lobby))
-    {:noreply, socket}
+    payload = serialize_lobby(lobby)
+    last_payload = get_lobby_payload(socket, payload.id)
+
+    case PayloadDelta.payload_delta(last_payload, payload) do
+      nil ->
+        {:noreply, socket}
+
+      delta_payload ->
+        push(socket, "lobby_updated", delta_payload)
+        {:noreply, put_lobby_payload(socket, payload)}
+    end
   end
 
   @impl true
@@ -50,6 +61,17 @@ defmodule GameServerWeb.LobbiesChannel do
 
   @impl true
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  defp get_lobby_payload(socket, lobby_id) do
+    socket.assigns
+    |> Map.get(:last_lobby_payloads, %{})
+    |> Map.get(lobby_id)
+  end
+
+  defp put_lobby_payload(socket, payload) do
+    payloads = Map.get(socket.assigns, :last_lobby_payloads, %{})
+    assign(socket, :last_lobby_payloads, Map.put(payloads, payload.id, payload))
+  end
 
   defp serialize_lobby(lobby) do
     host_id = if is_nil(lobby.host_id), do: -1, else: lobby.host_id

@@ -43,6 +43,7 @@ defmodule GameServerWeb.UserChannel do
   alias GameServer.Lobbies
   alias GameServer.Notifications
   alias GameServer.Parties
+  alias GameServerWeb.PayloadDelta
 
   # WebSocket message rate limits (per user) — defaults, overridden by config
   @default_ws_rate_limit 300
@@ -177,11 +178,13 @@ defmodule GameServerWeb.UserChannel do
   def handle_out("updated", payload, socket) do
     last_payload = Map.get(socket.assigns, :last_user_payload)
 
-    if last_payload == payload do
-      {:noreply, socket}
-    else
-      push(socket, "updated", payload)
-      {:noreply, assign(socket, :last_user_payload, payload)}
+    case PayloadDelta.payload_delta(last_payload, payload) do
+      nil ->
+        {:noreply, socket}
+
+      delta_payload ->
+        push(socket, "updated", delta_payload)
+        {:noreply, assign(socket, :last_user_payload, payload)}
     end
   end
 

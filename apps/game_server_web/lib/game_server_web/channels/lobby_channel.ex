@@ -35,6 +35,7 @@ defmodule GameServerWeb.LobbyChannel do
   alias GameServer.Chat
   alias GameServer.Lobbies
   alias GameServer.Lobbies.SpectatorTracker
+  alias GameServerWeb.PayloadDelta
 
   @impl true
   def join("lobby:" <> lobby_id_str, _payload, socket) do
@@ -133,11 +134,13 @@ defmodule GameServerWeb.LobbyChannel do
     payload = serialize_lobby(lobby)
     last_payload = Map.get(socket.assigns, :last_lobby_payload)
 
-    if last_payload == payload do
-      {:noreply, socket}
-    else
-      push(socket, "updated", payload)
-      {:noreply, assign(socket, :last_lobby_payload, payload)}
+    case PayloadDelta.payload_delta(last_payload, payload) do
+      nil ->
+        {:noreply, socket}
+
+      delta_payload ->
+        push(socket, "updated", delta_payload)
+        {:noreply, assign(socket, :last_lobby_payload, payload)}
     end
   end
 
@@ -198,10 +201,24 @@ defmodule GameServerWeb.LobbyChannel do
 
     if user do
       payload = User.serialize_brief(user) |> Map.put(:user_id, user_id)
-      push(socket, "member_updated", payload)
-    end
+      last_payloads = Map.get(socket.assigns, :last_member_payloads, %{})
+      last_payload = Map.get(last_payloads, user_id)
 
-    {:noreply, socket}
+      case PayloadDelta.payload_delta(last_payload, payload) do
+        nil ->
+          {:noreply, socket}
+
+        delta_payload ->
+          push(socket, "member_updated", delta_payload)
+
+          socket =
+            assign(socket, :last_member_payloads, Map.put(last_payloads, user_id, payload))
+
+          {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
   end
 
   # Ignore other messages

@@ -134,8 +134,43 @@ defmodule GameServerWeb.LobbyChannelTest do
 
     # allow a slightly longer window for the broadcast -> push to arrive in tests
     assert_push "updated", payload, 500
-    assert payload.title == "New Title"
-    assert Map.has_key?(payload, :host_name)
+    assert payload.id == lobby.id
+    assert payload.u.title == "New Title"
+  end
+
+  test "channel sends nested metadata field delta after initial lobby snapshot" do
+    host = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
+
+    {:ok, lobby} =
+      Lobbies.create_lobby(%{
+        title: "delta-channel-room",
+        host_id: host.id,
+        metadata: %{
+          "game_state" => "playing",
+          "boat_adventure" => %{"hp" => 10, "stopped_until" => 500}
+        }
+      })
+
+    {:ok, token_host, _} = Guardian.encode_and_sign(host)
+    {:ok, socket_host} = connect(GameServerWeb.UserSocket, %{"token" => token_host})
+    {:ok, _, _socket} = subscribe_and_join(socket_host, "lobby:#{lobby.id}", %{})
+
+    assert_push "updated", %{metadata: initial_metadata}, 500
+    assert initial_metadata["boat_adventure"]["hp"] == 10
+
+    {:ok, _updated} =
+      Lobbies.update_lobby_by_host(host, lobby, %{
+        "metadata" => %{
+          "game_state" => "playing",
+          "boat_adventure" => %{"hp" => 8}
+        }
+      })
+
+    assert_push "updated", payload, 500
+    refute Map.has_key?(payload, :metadata)
+
+    assert payload.u.metadata == %{"boat_adventure" => %{"hp" => 8}}
+    assert payload.r.metadata == %{"boat_adventure" => %{"stopped_until" => true}}
   end
 
   test "channel emits a single updated event per lobby update" do
@@ -152,7 +187,7 @@ defmodule GameServerWeb.LobbyChannelTest do
 
     {:ok, _} = Lobbies.update_lobby_by_host(host, lobby, %{"title" => "Single Update"})
 
-    assert_push "updated", %{title: "Single Update"}, 500
+    assert_push "updated", %{u: %{title: "Single Update"}}, 500
     refute_push "updated", _payload, 200
   end
 

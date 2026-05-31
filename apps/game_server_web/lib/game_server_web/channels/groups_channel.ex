@@ -17,6 +17,7 @@ defmodule GameServerWeb.GroupsChannel do
   use Phoenix.Channel
 
   alias GameServer.Groups
+  alias GameServerWeb.PayloadDelta
 
   @impl true
   def join("groups", _payload, socket) do
@@ -33,19 +34,31 @@ defmodule GameServerWeb.GroupsChannel do
   def handle_info({:group_created, group}, socket) do
     # Don't broadcast hidden groups to the public list channel
     if group.type != "hidden" do
-      push(socket, "group_created", serialize_group(group))
+      payload = serialize_group(group)
+      push(socket, "group_created", payload)
+      {:noreply, put_group_payload(socket, payload)}
+    else
+      {:noreply, socket}
     end
-
-    {:noreply, socket}
   end
 
   @impl true
   def handle_info({:group_updated, group}, socket) do
     if group.type != "hidden" do
-      push(socket, "group_updated", serialize_group(group))
-    end
+      payload = serialize_group(group)
+      last_payload = get_group_payload(socket, payload.id)
 
-    {:noreply, socket}
+      case PayloadDelta.payload_delta(last_payload, payload) do
+        nil ->
+          {:noreply, socket}
+
+        delta_payload ->
+          push(socket, "group_updated", delta_payload)
+          {:noreply, put_group_payload(socket, payload)}
+      end
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -56,6 +69,17 @@ defmodule GameServerWeb.GroupsChannel do
 
   @impl true
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  defp get_group_payload(socket, group_id) do
+    socket.assigns
+    |> Map.get(:last_group_payloads, %{})
+    |> Map.get(group_id)
+  end
+
+  defp put_group_payload(socket, payload) do
+    payloads = Map.get(socket.assigns, :last_group_payloads, %{})
+    assign(socket, :last_group_payloads, Map.put(payloads, payload.id, payload))
+  end
 
   defp serialize_group(group) do
     creator_name =

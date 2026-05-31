@@ -29,6 +29,7 @@ defmodule GameServerWeb.PartyChannel do
   alias GameServer.Accounts.User
   alias GameServer.Chat
   alias GameServer.Parties
+  alias GameServerWeb.PayloadDelta
 
   @impl true
   def join("party:" <> party_id_str, _payload, socket) do
@@ -104,11 +105,13 @@ defmodule GameServerWeb.PartyChannel do
     payload = serialize_party(party)
     last_payload = Map.get(socket.assigns, :last_party_payload)
 
-    if last_payload == payload do
-      {:noreply, socket}
-    else
-      push(socket, "updated", payload)
-      {:noreply, assign(socket, :last_party_payload, payload)}
+    case PayloadDelta.payload_delta(last_payload, payload) do
+      nil ->
+        {:noreply, socket}
+
+      delta_payload ->
+        push(socket, "updated", delta_payload)
+        {:noreply, assign(socket, :last_party_payload, payload)}
     end
   end
 
@@ -122,11 +125,13 @@ defmodule GameServerWeb.PartyChannel do
         payload = serialize_party(party)
         last_payload = Map.get(socket.assigns, :last_party_payload)
 
-        if last_payload == payload do
-          {:noreply, socket}
-        else
-          push(socket, "updated", payload)
-          {:noreply, assign(socket, :last_party_payload, payload)}
+        case PayloadDelta.payload_delta(last_payload, payload) do
+          nil ->
+            {:noreply, socket}
+
+          delta_payload ->
+            push(socket, "updated", delta_payload)
+            {:noreply, assign(socket, :last_party_payload, payload)}
         end
     end
   end
@@ -179,10 +184,24 @@ defmodule GameServerWeb.PartyChannel do
 
     if user do
       payload = User.serialize_brief(user) |> Map.put(:user_id, user_id)
-      push(socket, "member_updated", payload)
-    end
+      last_payloads = Map.get(socket.assigns, :last_member_payloads, %{})
+      last_payload = Map.get(last_payloads, user_id)
 
-    {:noreply, socket}
+      case PayloadDelta.payload_delta(last_payload, payload) do
+        nil ->
+          {:noreply, socket}
+
+        delta_payload ->
+          push(socket, "member_updated", delta_payload)
+
+          socket =
+            assign(socket, :last_member_payloads, Map.put(last_payloads, user_id, payload))
+
+          {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
