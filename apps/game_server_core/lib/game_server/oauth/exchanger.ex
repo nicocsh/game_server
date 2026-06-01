@@ -291,9 +291,8 @@ defmodule GameServer.OAuth.Exchanger do
     with :ok <- validate_apple_subject(claims["sub"]),
          :ok <- validate_apple_issuer(claims["iss"]),
          :ok <- validate_apple_audience(claims["aud"], apple_audiences(opts)),
-         :ok <- validate_apple_expiration(claims["exp"]),
-         :ok <- validate_apple_nonce(claims["nonce"], Keyword.get(opts, :nonce)) do
-      :ok
+         :ok <- validate_apple_expiration(claims["exp"]) do
+      validate_apple_nonce(claims["nonce"], Keyword.get(opts, :nonce))
     end
   end
 

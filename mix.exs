@@ -104,6 +104,7 @@ defmodule GameServerHost.MixProject do
       precommit:
         [
           "compile --warning-as-errors",
+          "xref unreachable",
           "format",
           "gen.sdk",
           "test",
@@ -111,6 +112,7 @@ defmodule GameServerHost.MixProject do
         ] ++
           local_web_commands([
             web_test_cmd("compile --warning-as-errors"),
+            web_test_cmd("xref unreachable"),
             web_cmd("format"),
             web_cmd("credo --strict")
           ]),

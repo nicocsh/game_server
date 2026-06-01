@@ -402,9 +402,8 @@ defmodule GameServerWeb.AuthController do
 
   defp exchange_oauth_code(provider, code, client_type \\ :web) do
     with {:ok, _config} <- oauth_provider(provider),
-         {:ok, user_info} <- exchange_provider_code(provider, code, client_type),
-         {:ok, user_params} <- oauth_user_params(provider, user_info) do
-      {:ok, user_params}
+         {:ok, user_info} <- exchange_provider_code(provider, code, client_type) do
+      oauth_user_params(provider, user_info)
     end
   end
 
@@ -457,11 +456,9 @@ defmodule GameServerWeb.AuthController do
   end
 
   defp apple_client_secret(client_id) do
-    try do
-      GameServer.Apple.client_secret(client_id: client_id)
-    rescue
-      _ -> nil
-    end
+    GameServer.Apple.client_secret(client_id: client_id)
+  rescue
+    _ -> nil
   end
 
   defp oauth_user_params("discord", %{"id" => discord_id, "email" => email} = response) do

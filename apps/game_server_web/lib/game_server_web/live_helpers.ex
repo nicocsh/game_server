@@ -74,20 +74,4 @@ defmodule GameServerWeb.LiveHelpers do
   Format a common `Failed: reason` message for LiveViews.
   """
   def failure_message(prefix, reason), do: prefix <> ": " <> inspect(reason)
-
-  @doc """
-  Handle `:ok`/`{:ok, value}` success and `{:error, reason}` failure tuples.
-  """
-  def handle_result(socket, result, success_message, failure_prefix, on_success) do
-    case result do
-      {:ok, value} ->
-        {:noreply, socket |> put_success(success_message) |> on_success.(value)}
-
-      :ok ->
-        {:noreply, socket |> put_success(success_message) |> on_success.(nil)}
-
-      {:error, reason} ->
-        {:noreply, put_failure(socket, failure_message(failure_prefix, reason))}
-    end
-  end
 end

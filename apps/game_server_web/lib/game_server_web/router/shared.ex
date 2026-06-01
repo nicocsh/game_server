@@ -36,13 +36,15 @@ defmodule GameServerWeb.Router.Shared do
 
   defmacro game_server_pipelines do
     quote do
+      alias GameServerWeb.Router.Shared, as: RouterShared
+
       pipeline :browser do
         plug :accepts, ["html"]
         plug :fetch_session
         plug :fetch_live_flash
         plug :put_root_layout, html: {GameServerWeb.Layouts, :root}
         plug :protect_from_forgery
-        plug :put_secure_browser_headers, GameServerWeb.Router.Shared.browser_headers()
+        plug :put_secure_browser_headers, RouterShared.browser_headers()
         plug GameServerWeb.Plugs.ColorMode
         plug :fetch_current_scope_for_user
       end
@@ -57,7 +59,7 @@ defmodule GameServerWeb.Router.Shared do
         plug :fetch_session
         plug :fetch_live_flash
         plug :put_root_layout, html: {GameServerWeb.Layouts, :root}
-        plug :put_secure_browser_headers, GameServerWeb.Router.Shared.browser_headers()
+        plug :put_secure_browser_headers, RouterShared.browser_headers()
         plug GameServerWeb.Plugs.ColorMode
         plug :fetch_current_scope_for_user
       end
@@ -84,7 +86,7 @@ defmodule GameServerWeb.Router.Shared do
         plug :fetch_live_flash
         plug :put_root_layout, html: {GameServerWeb.Layouts, :root}
         plug :protect_from_forgery
-        plug :put_secure_browser_headers, GameServerWeb.Router.Shared.swagger_headers()
+        plug :put_secure_browser_headers, RouterShared.swagger_headers()
         plug :fetch_current_scope_for_user
       end
 
@@ -113,6 +115,23 @@ defmodule GameServerWeb.Router.Shared do
 
   defmacro game_server_api_routes do
     quote do
+      game_server_api_docs_routes()
+      game_server_public_api_routes()
+      game_server_achievement_api_routes()
+      game_server_group_api_routes()
+      game_server_kv_api_routes()
+      game_server_account_lobby_api_routes()
+      game_server_friend_notification_api_routes()
+      game_server_group_mutation_api_routes()
+      game_server_hook_leaderboard_party_api_routes()
+      game_server_chat_api_routes()
+      game_server_admin_api_routes()
+      game_server_api_auth_routes()
+    end
+  end
+
+  defmacro game_server_api_docs_routes do
+    quote do
       scope "/api" do
         pipe_through [:api, :openapi_gate]
 
@@ -124,7 +143,11 @@ defmodule GameServerWeb.Router.Shared do
 
         get "/docs", GameServerWeb.SwaggerController, :index
       end
+    end
+  end
 
+  defmacro game_server_public_api_routes do
+    quote do
       scope "/api/v1", GameServerWeb.Api.V1, as: :api_v1 do
         pipe_through :api
 
@@ -143,7 +166,11 @@ defmodule GameServerWeb.Router.Shared do
         get "/leaderboards/:id/records/around/:user_id", LeaderboardController, :around
         get "/groups", GroupController, :index
       end
+    end
+  end
 
+  defmacro game_server_achievement_api_routes do
+    quote do
       scope "/api/v1", GameServerWeb.Api.V1, as: :api_v1 do
         pipe_through [:api, :api_auth]
 
@@ -157,7 +184,11 @@ defmodule GameServerWeb.Router.Shared do
         get "/achievements/user/:user_id", AchievementController, :user_achievements
         get "/achievements/:slug", AchievementController, :show
       end
+    end
+  end
 
+  defmacro game_server_group_api_routes do
+    quote do
       scope "/api/v1", GameServerWeb.Api.V1, as: :api_v1 do
         pipe_through [:api, :api_auth]
 
@@ -175,13 +206,21 @@ defmodule GameServerWeb.Router.Shared do
         get "/groups/:id", GroupController, :show
         get "/groups/:id/members", GroupController, :members
       end
+    end
+  end
 
+  defmacro game_server_kv_api_routes do
+    quote do
       scope "/api/v1", GameServerWeb.Api.V1, as: :api_v1 do
         pipe_through [:api, :api_auth]
 
         get "/kv/:key", KvController, :show
       end
+    end
+  end
 
+  defmacro game_server_account_lobby_api_routes do
+    quote do
       scope "/api/v1", GameServerWeb.Api.V1, as: :api_v1 do
         pipe_through [:api, :api_auth]
 
@@ -199,6 +238,15 @@ defmodule GameServerWeb.Router.Shared do
         delete "/me/providers/:provider", ProviderController, :unlink
         post "/me/device", ProviderController, :link_device
         delete "/me/device", ProviderController, :unlink_device
+      end
+    end
+  end
+
+  defmacro game_server_friend_notification_api_routes do
+    quote do
+      scope "/api/v1", GameServerWeb.Api.V1, as: :api_v1 do
+        pipe_through [:api, :api_auth]
+
         post "/friends", FriendController, :create
         get "/me/friends", FriendController, :index
         get "/me/friend-requests", FriendController, :requests
@@ -211,6 +259,15 @@ defmodule GameServerWeb.Router.Shared do
         get "/notifications", NotificationController, :index
         post "/notifications", NotificationController, :create
         delete "/notifications", NotificationController, :delete
+      end
+    end
+  end
+
+  defmacro game_server_group_mutation_api_routes do
+    quote do
+      scope "/api/v1", GameServerWeb.Api.V1, as: :api_v1 do
+        pipe_through [:api, :api_auth]
+
         post "/groups", GroupController, :create
         patch "/groups/:id", GroupController, :update
         post "/groups/:id/join", GroupController, :join
@@ -224,6 +281,15 @@ defmodule GameServerWeb.Router.Shared do
         delete "/groups/:id/join_requests/:request_id", GroupController, :cancel_request
         post "/groups/:id/invite", GroupController, :invite
         post "/groups/:id/notify", GroupController, :notify_group
+      end
+    end
+  end
+
+  defmacro game_server_hook_leaderboard_party_api_routes do
+    quote do
+      scope "/api/v1", GameServerWeb.Api.V1, as: :api_v1 do
+        pipe_through [:api, :api_auth]
+
         get "/hooks", HookController, :index
         post "/hooks/call", HookController, :invoke
         get "/leaderboards/:id/records/me", LeaderboardController, :me
@@ -240,6 +306,15 @@ defmodule GameServerWeb.Router.Shared do
         get "/parties/invitations/sent", PartyController, :list_sent_invitations
         post "/parties/create_lobby", PartyController, :create_lobby
         post "/parties/join_lobby/:id", PartyController, :join_lobby
+      end
+    end
+  end
+
+  defmacro game_server_chat_api_routes do
+    quote do
+      scope "/api/v1", GameServerWeb.Api.V1, as: :api_v1 do
+        pipe_through [:api, :api_auth]
+
         get "/chat/messages", ChatController, :index
         get "/chat/messages/:id", ChatController, :show
         post "/chat/messages", ChatController, :send
@@ -248,7 +323,19 @@ defmodule GameServerWeb.Router.Shared do
         post "/chat/read", ChatController, :mark_read
         get "/chat/unread", ChatController, :unread
       end
+    end
+  end
 
+  defmacro game_server_admin_api_routes do
+    quote do
+      game_server_admin_kv_leaderboard_api_routes()
+      game_server_admin_management_api_routes()
+      game_server_admin_chat_achievement_api_routes()
+    end
+  end
+
+  defmacro game_server_admin_kv_leaderboard_api_routes do
+    quote do
       scope "/api/v1/admin", GameServerWeb.Api.V1.Admin, as: :api_v1_admin do
         pipe_through [:api, :api_auth, :api_admin]
 
@@ -269,6 +356,14 @@ defmodule GameServerWeb.Router.Shared do
         delete "/leaderboards/:id/records/user/:user_id",
                LeaderboardRecordController,
                :delete_user
+      end
+    end
+  end
+
+  defmacro game_server_admin_management_api_routes do
+    quote do
+      scope "/api/v1/admin", GameServerWeb.Api.V1.Admin, as: :api_v1_admin do
+        pipe_through [:api, :api_auth, :api_admin]
 
         get "/lobbies", LobbyController, :index
         patch "/lobbies/:id", LobbyController, :update
@@ -284,6 +379,15 @@ defmodule GameServerWeb.Router.Shared do
         get "/sessions", SessionController, :index
         delete "/sessions/:id", SessionController, :delete
         delete "/users/:id/sessions", SessionController, :delete_user_sessions
+      end
+    end
+  end
+
+  defmacro game_server_admin_chat_achievement_api_routes do
+    quote do
+      scope "/api/v1/admin", GameServerWeb.Api.V1.Admin, as: :api_v1_admin do
+        pipe_through [:api, :api_auth, :api_admin]
+
         get "/chat", ChatController, :index
         delete "/chat/:id", ChatController, :delete
         delete "/chat/conversation", ChatController, :delete_conversation
@@ -296,7 +400,11 @@ defmodule GameServerWeb.Router.Shared do
         post "/achievements/unlock", AchievementController, :unlock
         post "/achievements/increment", AchievementController, :increment
       end
+    end
+  end
 
+  defmacro game_server_api_auth_routes do
+    quote do
       scope "/api/v1/auth", GameServerWeb do
         pipe_through :api
 

@@ -109,6 +109,7 @@ defmodule GameServerWeb.MixProject do
       lint: ["format --check-formatted", "credo --strict"],
       precommit: [
         "compile --warning-as-errors",
+        "xref unreachable",
         "format",
         "gen.sdk",
         "test",
