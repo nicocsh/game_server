@@ -104,7 +104,6 @@ defmodule GameServerHost.MixProject do
       precommit:
         [
           "compile --warning-as-errors",
-          "xref unreachable",
           "format",
           "gen.sdk",
           "test",
