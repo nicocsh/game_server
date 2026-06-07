@@ -210,7 +210,7 @@ defmodule GameServer.Hooks.PluginManager do
       {"fn", fn_name},
       {"user_id", opts |> Keyword.get(:caller) |> user_id()},
       {"args_count", length(args)},
-      {"args_types", args |> Enum.map(&arg_type/1) |> Enum.join(",")}
+      {"args_types", Enum.map_join(args, ",", &arg_type/1)}
     ]
     |> Enum.flat_map(fn
       {_key, nil} -> []
