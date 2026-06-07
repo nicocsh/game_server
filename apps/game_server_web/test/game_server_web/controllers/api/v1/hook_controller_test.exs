@@ -114,10 +114,40 @@ defmodule GameServerWeb.Api.V1.HookControllerTest do
     conn = post(conn, "/api/v1/hooks/call", body)
     assert %{"data" => [1, 2, 3]} = json_response(conn, 200)
 
-    body2 = %{"plugin" => plugin_name, "fn" => "greet", "args" => []}
-    conn2 = post(conn, "/api/v1/hooks/call", body2)
-    id = user.id
-    assert %{"data" => %{"greeted" => ^id}} = json_response(conn2, 200)
+    old_request_threshold =
+      Application.get_env(:game_server_web, :slow_request_threshold_ms, :unset)
+
+    old_hook_threshold = Application.get_env(:game_server_core, :slow_hook_threshold_ms, :unset)
+
+    Application.put_env(:game_server_web, :slow_request_threshold_ms, -1.0)
+    Application.put_env(:game_server_core, :slow_hook_threshold_ms, -1.0)
+
+    try do
+      body2 = %{"plugin" => plugin_name, "fn" => "greet", "args" => []}
+      id = user.id
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          conn2 = post(conn, "/api/v1/hooks/call?debug=1&token=secret-value", body2)
+          assert %{"data" => %{"greeted" => ^id}} = json_response(conn2, 200)
+        end)
+
+      assert log =~ ~s(Slow Hook: plugin="test_plugin" fn="greet")
+      assert log =~ ~s(Slow Request: POST /api/v1/hooks/call)
+      assert log =~ ~s(query=)
+      assert log =~ ~s("debug" => "1")
+      assert log =~ ~s("token" => "[FILTERED]")
+      assert log =~ ~s(body=)
+      assert log =~ ~s("plugin" => "test_plugin")
+      assert log =~ ~s("fn" => "greet")
+      assert log =~ ~s("args" => %{"count" => 0, "types" => []})
+      assert log =~ "user_id=#{id}"
+      assert log =~ "args_count=0"
+      refute log =~ "secret-value"
+    after
+      restore_env(:slow_request_threshold_ms, old_request_threshold)
+      restore_core_env(:slow_hook_threshold_ms, old_hook_threshold)
+    end
 
     body3 = %{"plugin" => plugin_name, "fn" => "boom", "args" => []}
     conn3 = post(conn, "/api/v1/hooks/call", body3)
@@ -125,4 +155,9 @@ defmodule GameServerWeb.Api.V1.HookControllerTest do
     assert %{"error" => "exception", "details" => details} = json_response(conn3, 400)
     assert details =~ "boom"
   end
+
+  defp restore_env(key, :unset), do: Application.delete_env(:game_server_web, key)
+  defp restore_env(key, value), do: Application.put_env(:game_server_web, key, value)
+  defp restore_core_env(key, :unset), do: Application.delete_env(:game_server_core, key)
+  defp restore_core_env(key, value), do: Application.put_env(:game_server_core, key, value)
 end

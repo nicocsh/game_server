@@ -31,6 +31,7 @@ defmodule GameServer.Hooks.PluginManager do
   @default_plugins_dir Path.expand("modules/plugins")
 
   @timeout_ms 60_000
+  @default_slow_hook_threshold_ms 200.0
 
   defmodule Plugin do
     @moduledoc """
@@ -106,6 +107,20 @@ defmodule GameServer.Hooks.PluginManager do
   @spec call_rpc(plugin_name(), String.t(), list(), keyword()) :: {:ok, any()} | {:error, term()}
   def call_rpc(plugin, fn_name, args, opts \\ [])
       when is_binary(plugin) and is_binary(fn_name) and is_list(args) and is_list(opts) do
+    start_time = System.monotonic_time()
+    result = do_call_rpc(plugin, fn_name, args, opts)
+    duration_ms = duration_ms_since(start_time)
+
+    if duration_ms > slow_hook_threshold_ms() do
+      Logger.warning(
+        "Slow Hook: #{format_rpc_context(plugin, fn_name, args, opts)} result=#{rpc_result_status(result)} took #{format_duration_ms(duration_ms)}ms"
+      )
+    end
+
+    result
+  end
+
+  defp do_call_rpc(plugin, fn_name, args, opts) do
     case lookup(plugin) do
       {:ok, %Plugin{status: :ok, hooks_module: mod}} when is_atom(mod) ->
         timeout = Keyword.get(opts, :timeout_ms, @timeout_ms)
@@ -187,6 +202,63 @@ defmodule GameServer.Hooks.PluginManager do
     state
     |> Map.values()
     |> Enum.sort_by(& &1.name)
+  end
+
+  defp format_rpc_context(plugin, fn_name, args, opts) do
+    [
+      {"plugin", plugin},
+      {"fn", fn_name},
+      {"user_id", opts |> Keyword.get(:caller) |> user_id()},
+      {"args_count", length(args)},
+      {"args_types", args |> Enum.map(&arg_type/1) |> Enum.join(",")}
+    ]
+    |> Enum.flat_map(fn
+      {_key, nil} -> []
+      {key, value} -> ["#{key}=#{format_context_value(value)}"]
+    end)
+    |> Enum.join(" ")
+  end
+
+  defp arg_type(value) when is_binary(value), do: "string"
+  defp arg_type(value) when is_integer(value), do: "integer"
+  defp arg_type(value) when is_float(value), do: "float"
+  defp arg_type(value) when is_boolean(value), do: "boolean"
+  defp arg_type(value) when is_list(value), do: "list"
+  defp arg_type(value) when is_map(value), do: "map"
+  defp arg_type(nil), do: "nil"
+  defp arg_type(_value), do: "unknown"
+
+  defp rpc_result_status({:ok, _result}), do: "ok"
+  defp rpc_result_status({:error, reason}), do: "error:#{inspect(reason)}"
+  defp rpc_result_status(_result), do: "unknown"
+
+  defp user_id(%{id: id}) when is_integer(id), do: id
+  defp user_id(_user), do: nil
+
+  defp format_context_value(value) when is_binary(value), do: inspect(value)
+  defp format_context_value(value) when is_integer(value), do: Integer.to_string(value)
+  defp format_context_value(nil), do: "nil"
+  defp format_context_value(value), do: inspect(value)
+
+  defp duration_ms_since(start_time) do
+    System.monotonic_time()
+    |> Kernel.-(start_time)
+    |> System.convert_time_unit(:native, :microsecond)
+    |> Kernel./(1000)
+  end
+
+  defp format_duration_ms(duration_ms) do
+    duration_ms
+    |> Kernel.*(1.0)
+    |> :erlang.float_to_binary(decimals: 3)
+  end
+
+  defp slow_hook_threshold_ms do
+    Application.get_env(
+      :game_server_core,
+      :slow_hook_threshold_ms,
+      @default_slow_hook_threshold_ms
+    )
   end
 
   defp do_reload(prev_state) when is_map(prev_state) do
