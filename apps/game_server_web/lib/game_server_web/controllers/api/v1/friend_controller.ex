@@ -76,7 +76,6 @@ defmodule GameServerWeb.Api.V1.FriendController do
                  properties: %{
                    id: %Schema{type: :integer},
                    friendship_id: %Schema{type: :integer},
-                   email: %Schema{type: :string},
                    display_name: %Schema{type: :string},
                    profile_url: %Schema{type: :string},
                    metadata: %Schema{
@@ -311,8 +310,7 @@ defmodule GameServerWeb.Api.V1.FriendController do
                     type: :object,
                     properties: %{
                       id: %Schema{type: :integer},
-                      display_name: %Schema{type: :string},
-                      email: %Schema{type: :string}
+                      display_name: %Schema{type: :string}
                     }
                   }
                 }

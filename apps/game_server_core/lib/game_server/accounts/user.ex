@@ -386,7 +386,7 @@ defmodule GameServer.Accounts.User do
     do: last_seen_at
 
   @doc """
-  Serialize a user into a compact map suitable for member lists in parties,
+  Serialize a user into a compact public map suitable for member lists in parties,
   lobbies, and friends. Includes metadata for rendering player appearance.
   """
   @spec serialize_brief(t()) :: map()
@@ -394,7 +394,6 @@ defmodule GameServer.Accounts.User do
     %{
       id: user.id,
       display_name: user.display_name || "",
-      email: user.email || "",
       profile_url: user.profile_url || "",
       metadata: user.metadata || %{},
       is_online: user.is_online || false,
@@ -408,7 +407,6 @@ defimpl Jason.Encoder, for: GameServer.Accounts.User do
   def encode(user, opts) do
     %{
       id: user.id,
-      email: user.email || "",
       display_name: user.display_name || "",
       profile_url: user.profile_url || "",
       metadata: user.metadata || %{},

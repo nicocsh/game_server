@@ -66,7 +66,7 @@ defmodule GameServer.Accounts do
   end
 
   @doc """
-  Search users by email or display name (case-insensitive, partial match).
+  Search users by display name (case-insensitive prefix match) or exact numeric id.
 
   Returns a list of User structs.
 
@@ -106,13 +106,12 @@ defmodule GameServer.Accounts do
     end
   end
 
-  # Whether a user's display_name or email starts with `q` (case-insensitive),
-  # meaning the text search already includes them.
+  # Whether a user's display_name starts with `q` (case-insensitive), meaning
+  # the text search already includes them.
   defp text_search_matches_user?(user, q) do
     nq = String.downcase(q)
     dn = (user.display_name || "") |> String.downcase()
-    em = (user.email || "") |> String.downcase()
-    String.starts_with?(dn, nq) or String.starts_with?(em, nq)
+    String.starts_with?(dn, nq)
   end
 
   defp search_users_by_text(normalized_q, page, page_size) do
@@ -121,16 +120,14 @@ defmodule GameServer.Accounts do
 
     Repo.all(
       from u in User,
-        where:
-          like(u.email, ^pattern) or
-            fragment("lower(?) LIKE ?", u.display_name, ^pattern),
+        where: fragment("lower(?) LIKE ?", u.display_name, ^pattern),
         limit: ^page_size,
         offset: ^offset
     )
   end
 
   @doc """
-  Count users matching a text query (email or display_name). Returns integer.
+  Count users matching a display name query or exact numeric id. Returns integer.
   """
   @spec count_search_users(String.t()) :: non_neg_integer()
   def count_search_users(query) when is_binary(query) do
@@ -166,9 +163,7 @@ defmodule GameServer.Accounts do
 
     Repo.one(
       from u in User,
-        where:
-          like(u.email, ^pattern) or
-            fragment("lower(?) LIKE ?", u.display_name, ^pattern),
+        where: fragment("lower(?) LIKE ?", u.display_name, ^pattern),
         select: count(u.id)
     ) || 0
   end

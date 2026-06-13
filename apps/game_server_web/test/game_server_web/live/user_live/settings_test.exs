@@ -237,8 +237,12 @@ defmodule GameServerWeb.UserLive.SettingsTest do
       %{conn: log_in_user(conn, a), user: a}
     end
 
-    test "searches users by email or display_name and send request", %{conn: conn, user: a} do
-      b = user_fixture(%{email: "friend-search@example.com", display_name: "FriendSearch"})
+    test "searches users by display_name and send request without showing email", %{
+      conn: conn,
+      user: a
+    } do
+      b = user_fixture(%{email: "friend-search@example.com"})
+      {:ok, b} = Accounts.update_user_display_name(b, %{"display_name" => "FriendSearch"})
 
       {:ok, lv, _html} = live(conn, ~p"/users/settings")
 
@@ -249,10 +253,12 @@ defmodule GameServerWeb.UserLive.SettingsTest do
 
       # find search form and trigger change
       search_el = element(lv, "form[phx-change=\"search_users\"]")
-      render_change(search_el, %{"q" => "friend-search"})
+      render_change(search_el, %{"q" => "FriendSearch"})
 
       # search results should include our user
-      assert render(lv) =~ b.email
+      html = render(lv)
+      assert html =~ b.display_name
+      refute html =~ b.email
 
       # send request using button for the search result
       send_btn = element(lv, "#search-#{b.id} button", "Send")

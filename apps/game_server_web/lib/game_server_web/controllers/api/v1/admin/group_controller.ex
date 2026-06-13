@@ -36,7 +36,10 @@ defmodule GameServerWeb.Api.V1.Admin.GroupController do
       type: %Schema{type: :string},
       max_members: %Schema{type: :integer},
       metadata: %Schema{type: :object},
-      creator_id: %Schema{type: :integer, nullable: true},
+      creator_id: %Schema{
+        type: :integer,
+        description: "User ID of the creator, or -1 for system groups"
+      },
       creator_name: %Schema{type: :string},
       member_count: %Schema{type: :integer},
       slowdown: %Schema{type: :integer, description: "Chat slowdown in seconds (0 = disabled)"},

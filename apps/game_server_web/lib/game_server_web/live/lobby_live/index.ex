@@ -3,6 +3,7 @@ defmodule GameServerWeb.LobbyLive.Index do
 
   alias GameServer.Accounts
   alias GameServer.Lobbies
+  alias GameServerWeb.LiveHelpers
 
   @impl true
   def mount(_params, _session, socket) do
@@ -844,7 +845,7 @@ defmodule GameServerWeb.LobbyLive.Index do
                             id={"member-" <> to_string(m.id)}
                             class="flex items-center justify-between py-1"
                           >
-                            <div>{m.display_name || m.email || "user-#{m.id}"}</div>
+                            <div>{LiveHelpers.public_user_name(m)}</div>
                             <div class="flex items-center gap-2">
                               <%= if m.id == lobby.host_id do %>
                                 <span class="text-xs text-muted">
@@ -882,7 +883,7 @@ defmodule GameServerWeb.LobbyLive.Index do
                             id={"member-" <> to_string(m.id)}
                             class="flex items-center justify-between py-1"
                           >
-                            <div>{m.display_name || m.email || "user-#{m.id}"}</div>
+                            <div>{LiveHelpers.public_user_name(m)}</div>
                             <div>
                               <%= if m.id == lobby.host_id do %>
                                 <span class="text-xs text-muted">

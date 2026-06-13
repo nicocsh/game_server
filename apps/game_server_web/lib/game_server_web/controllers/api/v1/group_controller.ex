@@ -28,7 +28,10 @@ defmodule GameServerWeb.Api.V1.GroupController do
       },
       max_members: %Schema{type: :integer, description: "Maximum number of members"},
       metadata: %Schema{type: :object, description: "Server-managed metadata"},
-      creator_id: %Schema{type: :integer, description: "User ID of the creator", nullable: true},
+      creator_id: %Schema{
+        type: :integer,
+        description: "User ID of the creator, or -1 for system groups"
+      },
       creator_name: %Schema{
         type: :string,
         description: "Display name of the creator"

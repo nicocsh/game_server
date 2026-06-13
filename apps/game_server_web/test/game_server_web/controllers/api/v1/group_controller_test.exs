@@ -7,6 +7,7 @@ defmodule GameServerWeb.Api.V1.GroupControllerTest do
 
   alias GameServer.AccountsFixtures
   alias GameServer.Groups
+  alias GameServer.Repo
   alias GameServerWeb.Auth.Guardian
 
   setup do
@@ -513,6 +514,22 @@ defmodule GameServerWeb.Api.V1.GroupControllerTest do
         |> get("/api/v1/groups/me")
 
       assert %{"data" => [%{"title" => "Mine1"}]} = json_response(conn, 200)
+    end
+
+    test "returns -1 for system group creator", %{conn: conn} do
+      user = create_user()
+      {:ok, group} = Groups.create_group(user.id, %{"title" => "SystemGroup"})
+
+      group
+      |> Ecto.Changeset.change(%{creator_id: nil})
+      |> Repo.update!()
+
+      conn =
+        conn
+        |> auth_conn(user)
+        |> get("/api/v1/groups/me")
+
+      assert %{"data" => [%{"creator_id" => -1, "creator_name" => ""}]} = json_response(conn, 200)
     end
 
     test "returns 401 without auth", %{conn: conn} do

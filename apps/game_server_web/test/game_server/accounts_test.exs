@@ -546,6 +546,19 @@ defmodule GameServer.AccountsTest do
       assert Enum.any?(results, &(&1.id == user.id))
     end
 
+    test "does not find user by email prefix" do
+      user_fixture(%{email: "private-search@example.com", display_name: "PublicName"})
+
+      assert Accounts.search_users("private-search") == []
+    end
+
+    test "serialize_brief omits email" do
+      user = user_fixture(%{email: "brief-private@example.com", display_name: "BriefName"})
+
+      refute Map.has_key?(User.serialize_brief(user), :email)
+      refute Map.has_key?(Jason.decode!(Jason.encode!(user)), "email")
+    end
+
     test "numeric query returns both ID match and display_name matches" do
       # Create a user whose display_name starts with a digit
       user_with_numeric_name = user_fixture()

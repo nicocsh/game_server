@@ -26,7 +26,6 @@ defmodule GameServerWeb.Api.V1.PartyController do
           properties: %{
             id: %Schema{type: :integer},
             display_name: %Schema{type: :string},
-            email: %Schema{type: :string, nullable: true},
             profile_url: %Schema{type: :string, nullable: true},
             metadata: %Schema{
               type: :object,
@@ -48,7 +47,6 @@ defmodule GameServerWeb.Api.V1.PartyController do
         %{
           id: 42,
           display_name: "Player1",
-          email: "player1@example.com",
           profile_url: "",
           metadata: %{hat: "red", color: "#FF0000"},
           is_online: true,

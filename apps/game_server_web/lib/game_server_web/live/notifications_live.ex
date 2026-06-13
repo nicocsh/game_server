@@ -2,6 +2,7 @@ defmodule GameServerWeb.NotificationsLive do
   use GameServerWeb, :live_view
 
   alias GameServer.Notifications
+  alias GameServerWeb.LiveHelpers
 
   @page_size 25
 
@@ -58,7 +59,7 @@ defmodule GameServerWeb.NotificationsLive do
                             {gettext("Chat")}
                           </span>
                         <% Ecto.assoc_loaded?(n.sender) && n.sender -> %>
-                          {n.sender.display_name || n.sender.email}
+                          {LiveHelpers.public_user_name(n.sender)}
                         <% true -> %>
                           {"User #{n.sender_id}"}
                       <% end %>

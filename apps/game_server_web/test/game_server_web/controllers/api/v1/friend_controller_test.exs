@@ -51,6 +51,7 @@ defmodule GameServerWeb.Api.V1.FriendControllerTest do
     assert Enum.any?(resp["data"], fn r -> r["id"] == b.id end)
     entry = Enum.find(resp["data"], fn r -> r["id"] == b.id end)
     assert is_integer(entry["friendship_id"])
+    refute Map.has_key?(entry, "email")
     # verify the returned friendship_id can be used to delete the friendship
     del = delete(conn_a2, "/api/v1/friends/#{entry["friendship_id"]}")
     assert del.status == 200
@@ -74,6 +75,8 @@ defmodule GameServerWeb.Api.V1.FriendControllerTest do
     assert [] = resp["outgoing"]
 
     incoming = hd(resp["incoming"])
+    refute Map.has_key?(incoming["requester"], "email")
+    refute Map.has_key?(incoming["target"], "email")
     assert incoming["requester"]["last_seen_at"] == "1970-01-01T00:00:00Z"
     assert incoming["target"]["last_seen_at"] == "1970-01-01T00:00:00Z"
 
@@ -272,6 +275,8 @@ defmodule GameServerWeb.Api.V1.FriendControllerTest do
     # b's blocked list should include the friendship
     resp = get(conn_b, "/api/v1/me/blocked") |> json_response(200)
     assert Enum.any?(resp["data"], fn r -> r["id"] == f.id end)
+    blocked = Enum.find(resp["data"], fn r -> r["id"] == f.id end)
+    refute Map.has_key?(blocked["requester"], "email")
 
     # meta should include total_count / total_pages
     assert resp["meta"]["total_count"] == 1

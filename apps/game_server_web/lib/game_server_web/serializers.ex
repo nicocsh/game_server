@@ -115,7 +115,7 @@ defmodule GameServerWeb.Serializers do
       description: group.description || "",
       type: group.type,
       max_members: group.max_members,
-      creator_id: group.creator_id,
+      creator_id: response_id(group.creator_id),
       creator_name: assoc_or_lookup_display_name(creator, group.creator_id),
       metadata: group.metadata || %{}
     }
@@ -154,6 +154,9 @@ defmodule GameServerWeb.Serializers do
   defp assoc_or_lookup_display_name(_assoc, nil), do: ""
   defp assoc_or_lookup_display_name(%{} = assoc, _id), do: assoc_display_name(assoc)
   defp assoc_or_lookup_display_name(_assoc, id), do: display_name(id)
+
+  defp response_id(nil), do: -1
+  defp response_id(id), do: id
 
   defp maybe_put(map, _key, _value, false), do: map
   defp maybe_put(map, key, value, true), do: Map.put(map, key, value)

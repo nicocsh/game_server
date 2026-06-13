@@ -602,11 +602,10 @@ defmodule GameServerWeb.GroupsLive do
                 <td>
                   <div class="flex items-center gap-2">
                     <div class="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center text-sm font-semibold">
-                      {String.first(member.user.display_name || member.user.email || "?")
-                      |> String.upcase()}
+                      {LiveHelpers.public_user_initial(member.user)}
                     </div>
                     <span>
-                      {member.user.display_name || member.user.email || "##{member.user.id}"}
+                      {LiveHelpers.public_user_name(member.user)}
                     </span>
                   </div>
                 </td>

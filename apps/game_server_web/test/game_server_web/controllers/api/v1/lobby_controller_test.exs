@@ -87,6 +87,24 @@ defmodule GameServerWeb.Api.V1.LobbyControllerTest do
     refute Enum.any?(resp3["data"], fn l -> l["id"] == open_small.id end)
   end
 
+  test "GET /api/v1/lobbies/:id omits member emails", %{conn: conn} do
+    host = AccountsFixtures.user_fixture()
+    member = AccountsFixtures.user_fixture()
+    {:ok, lobby} = Lobbies.create_lobby(%{title: "public-members", host_id: host.id})
+    assert {:ok, _} = Lobbies.join_lobby(member, lobby)
+    {:ok, token, _} = Guardian.encode_and_sign(host)
+
+    conn =
+      conn
+      |> put_req_header("authorization", "Bearer " <> token)
+      |> get("/api/v1/lobbies/#{lobby.id}")
+
+    resp = json_response(conn, 200)
+
+    assert Enum.any?(resp["members"], fn m -> m["id"] == host.id end)
+    assert Enum.all?(resp["members"], fn m -> not Map.has_key?(m, "email") end)
+  end
+
   test "POST /api/v1/lobbies (hosted) requires auth and creates a lobby", %{conn: conn} do
     user = AccountsFixtures.user_fixture()
     {:ok, token, _} = Guardian.encode_and_sign(user)

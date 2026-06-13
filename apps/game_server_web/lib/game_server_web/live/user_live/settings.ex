@@ -449,7 +449,7 @@ defmodule GameServerWeb.UserLive.Settings do
                       ]}
                       title={if(u.is_online, do: "Online", else: "Offline")}
                     />
-                    {u.display_name || u.email}
+                    {LiveHelpers.public_user_name(u)}
                     <span class="text-xs text-base-content/60">(id: {u.id})</span>
                   </div>
                   <div class="flex gap-1">
@@ -531,7 +531,7 @@ defmodule GameServerWeb.UserLive.Settings do
                 <div :for={s <- @search_results} id={"search-" <> Integer.to_string(s.id)}>
                   <div class="p-2 border rounded bg-base-100 flex items-center justify-between">
                     <div class="text-sm">
-                      {s.display_name || s.email}
+                      {LiveHelpers.public_user_name(s)}
                       <span class="text-xs text-base-content/60 ml-2">(id: {s.id})</span>
                     </div>
                     <div :if={s.id != @current_scope.user.id}>
@@ -835,7 +835,6 @@ defmodule GameServerWeb.UserLive.Settings do
                       <tr>
                         <th></th>
                         <th>{gettext("Name")}</th>
-                        <th>{gettext("Email")}</th>
                         <th>{gettext("Role")}</th>
                         <th>{gettext("Joined")}</th>
                         <%= if @group_detail_role == "admin" do %>
@@ -857,8 +856,7 @@ defmodule GameServerWeb.UserLive.Settings do
                             title={if(m.user.is_online, do: "Online", else: "Offline")}
                           />
                         </td>
-                        <td class="text-sm">{m.user.display_name || "User #{m.user_id}"}</td>
-                        <td class="text-sm text-base-content/70">{m.user.email}</td>
+                        <td class="text-sm">{LiveHelpers.public_user_name(m.user)}</td>
                         <td>
                           <span class={[
                             "badge badge-sm",
@@ -934,7 +932,7 @@ defmodule GameServerWeb.UserLive.Settings do
                   >
                     <div class="flex items-center gap-2">
                       <div class="text-sm font-medium">
-                        {req.user.display_name || req.user.email}
+                        {LiveHelpers.public_user_name(req.user)}
                       </div>
                       <span class="text-xs text-base-content/50">
                         #{req.user_id} &mdash; {Calendar.strftime(req.inserted_at, "%Y-%m-%d %H:%M")}
@@ -964,7 +962,7 @@ defmodule GameServerWeb.UserLive.Settings do
               <div :if={@group_detail_role == "admin"} class="mt-6">
                 <h4 class="font-semibold text-base mb-3">{gettext("Invite")}</h4>
 
-                <%!-- Search by name, email, or user ID --%>
+                <%!-- Search by name or user ID --%>
                 <div class="form-control mb-3">
                   <label class="label">
                     <span class="label-text">{gettext("Search...")}</span>
@@ -1000,7 +998,7 @@ defmodule GameServerWeb.UserLive.Settings do
                           )
                         ]} />
                         <div>
-                          <span class="text-sm font-medium">{u.display_name || u.email}</span>
+                          <span class="text-sm font-medium">{LiveHelpers.public_user_name(u)}</span>
                           <span class="text-xs text-base-content/50 ml-1">#{u.id}</span>
                         </div>
                       </div>
@@ -1042,7 +1040,7 @@ defmodule GameServerWeb.UserLive.Settings do
                             else: "bg-base-content/30"
                           )
                         ]} />
-                        <span class="text-sm">{f.display_name || f.email}</span>
+                        <span class="text-sm">{LiveHelpers.public_user_name(f)}</span>
                       </div>
                       <button
                         phx-click="group_invite_user"

@@ -92,7 +92,7 @@ defmodule GameServerWeb.ChatLive do
          socket
          |> assign(:chat_type, "friend")
          |> assign(:chat_target, fid)
-         |> assign(:chat_target_name, target.display_name || target.email)
+         |> assign(:chat_target_name, LiveHelpers.public_user_name(target))
          |> assign(:page, 1)
          |> assign(:editing_message_id, nil)
          |> assign(:editing_message_content, "")
@@ -141,7 +141,7 @@ defmodule GameServerWeb.ChatLive do
                   )
                 ]}
               >
-                <span class="truncate flex-1">{f.display_name || f.email}</span>
+                <span class="truncate flex-1">{LiveHelpers.public_user_name(f)}</span>
                 <%= if (count = Map.get(@friend_unread, f.id, 0)) > 0 do %>
                   <span class="badge badge-sm badge-info">{count}</span>
                 <% end %>
@@ -345,7 +345,7 @@ defmodule GameServerWeb.ChatLive do
        socket
        |> assign(:chat_type, "friend")
        |> assign(:chat_target, fid)
-       |> assign(:chat_target_name, target.display_name || target.email)
+       |> assign(:chat_target_name, LiveHelpers.public_user_name(target))
        |> assign(:page, 1)
        |> assign(:editing_message_id, nil)
        |> assign(:editing_message_content, "")
@@ -616,7 +616,7 @@ defmodule GameServerWeb.ChatLive do
 
   defp sender_name(msg) do
     if Ecto.assoc_loaded?(msg.sender) && msg.sender do
-      msg.sender.display_name || msg.sender.email
+      LiveHelpers.public_user_name(msg.sender)
     else
       "User #{msg.sender_id}"
     end

@@ -327,7 +327,7 @@ defmodule GameServer.Accounts do
 
 
   @doc ~S"""
-    Count users matching a text query (email or display_name). Returns integer.
+    Count users matching a display name query or exact numeric id. Returns integer.
     
   """
   @spec count_search_users(String.t()) :: non_neg_integer()
@@ -1254,7 +1254,7 @@ defmodule GameServer.Accounts do
 
 
   @doc ~S"""
-    Search users by email or display name (case-insensitive, partial match).
+    Search users by display name (case-insensitive prefix match) or exact numeric id.
     
     Returns a list of User structs.
     
@@ -1276,7 +1276,7 @@ defmodule GameServer.Accounts do
 
 
   @doc ~S"""
-    Search users by email or display name (case-insensitive, partial match).
+    Search users by display name (case-insensitive prefix match) or exact numeric id.
     
     Returns a list of User structs.
     

@@ -41,6 +41,7 @@ defmodule GameServerWeb.Api.V1.PartyControllerTest do
       assert Map.has_key?(body, "leader_name")
       assert body["max_size"] == 4
       assert length(body["members"]) == 1
+      refute Map.has_key?(hd(body["members"]), "email")
     end
 
     test "returns conflict if already in a party", %{conn: conn} do
@@ -75,6 +76,7 @@ defmodule GameServerWeb.Api.V1.PartyControllerTest do
       assert body["id"] == party.id
       assert body["leader_id"] == user.id
       assert Map.has_key?(body, "leader_name")
+      assert Enum.all?(body["members"], fn m -> not Map.has_key?(m, "email") end)
     end
 
     test "returns 404 when not in a party", %{conn: conn} do

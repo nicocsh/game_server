@@ -1,6 +1,6 @@
 defmodule GameServerWeb.LiveHelpers do
   @moduledoc """
-  Shared helpers for LiveView rate limiting and client IP extraction.
+  Shared helpers for LiveViews.
   """
 
   @doc """
@@ -74,4 +74,28 @@ defmodule GameServerWeb.LiveHelpers do
   Format a common `Failed: reason` message for LiveViews.
   """
   def failure_message(prefix, reason), do: prefix <> ": " <> inspect(reason)
+
+  @doc """
+  Return a public user label without exposing email addresses.
+  """
+  def public_user_name(nil), do: ""
+
+  def public_user_name(%{display_name: name}) when is_binary(name) and name != "", do: name
+  def public_user_name(%{"display_name" => name}) when is_binary(name) and name != "", do: name
+  def public_user_name(%{id: id}) when not is_nil(id), do: "User #{id}"
+  def public_user_name(%{"id" => id}) when not is_nil(id), do: "User #{id}"
+  def public_user_name(%{user_id: id}) when not is_nil(id), do: "User #{id}"
+  def public_user_name(%{"user_id" => id}) when not is_nil(id), do: "User #{id}"
+  def public_user_name(id) when is_integer(id), do: "User #{id}"
+  def public_user_name(_), do: "User"
+
+  @doc """
+  Return the first character from the public user label.
+  """
+  def public_user_initial(user) do
+    case public_user_name(user) do
+      <<first::utf8, _rest::binary>> -> String.upcase(<<first::utf8>>)
+      _ -> "?"
+    end
+  end
 end
