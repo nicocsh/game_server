@@ -137,6 +137,22 @@
           "image_position_desktop": "right",
           "image_position_mobile": "top",
           "text_align": "left"
+        },
+        {
+          "title": "Payments & Store Integrations",
+          "text": "Server-side payments with Stripe, Google Play, App Store, and Steam providers. Validate receipts, process signed webhooks, grant entitlements, revoke refunds, and inspect everything in admin.",
+          "icon": "hero-credit-card-solid",
+          "media_width": "third",
+          "image_position_desktop": "left",
+          "image_position_mobile": "top",
+          "text_align": "left",
+          "buttons": [
+            {
+              "label": "Payment Docs",
+              "href": "/docs/setup#payments",
+              "icon": "hero-book-open-solid"
+            }
+          ]
         }
       ]
     },

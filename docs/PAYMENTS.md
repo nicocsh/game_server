@@ -2,6 +2,8 @@
 
 GameServer keeps a server-side payment ledger. Clients can start purchases with a store SDK or Stripe Checkout, but rewards are granted only after the server validates the provider payload or receives a signed webhook.
 
+See [Payment Provider Decision Plan](PAYMENT_PROVIDER_PLAN.md) for the web provider decision, alternatives, and revisit criteria.
+
 ## Stripe Modes
 
 Stripe supports test/sandbox mode and live mode. Mode is selected by the API key:
