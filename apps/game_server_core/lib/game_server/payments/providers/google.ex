@@ -9,6 +9,8 @@ defmodule GameServer.Payments.Providers.Google do
 
   @androidpublisher_scope "https://www.googleapis.com/auth/androidpublisher"
   @token_url "https://oauth2.googleapis.com/token"
+  alias GameServer.Payments.ProviderConfig
+
   @publisher_base_url "https://androidpublisher.googleapis.com/androidpublisher/v3"
 
   @active_subscription_states ~w(
@@ -386,8 +388,7 @@ defmodule GameServer.Payments.Providers.Google do
   end
 
   defp default_environment do
-    System.get_env("PAYMENTS_ENVIRONMENT") ||
-      Application.get_env(:game_server_core, :payments_environment, "production")
+    ProviderConfig.environment()
   end
 
   defp normalize_private_key(value), do: String.replace(value, "\\n", "\n")

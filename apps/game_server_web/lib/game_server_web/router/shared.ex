@@ -240,7 +240,6 @@ defmodule GameServerWeb.Router.Shared do
         patch "/me/password", MeController, :update_password
         patch "/me/display_name", MeController, :update_display_name
         get "/payments/entitlements", PaymentController, :entitlements
-        get "/payments/wallet", PaymentController, :wallet
         post "/payments/checkout/stripe", PaymentController, :stripe_checkout
         post "/payments/checkout/steam", PaymentController, :steam_checkout
         post "/payments/steam/finalize", PaymentController, :steam_finalize
@@ -490,11 +489,15 @@ defmodule GameServerWeb.Router.Shared do
           on_mount: unquote(on_mount) do
           live "/users/settings", UserLive.Settings, :edit
           live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
+          live "/store", StoreLive.Index, :index
+          live "/store/success", StoreLive.Index, :success
+          live "/store/cancel", StoreLive.Index, :cancel
           live "/notifications", NotificationsLive, :index
           live "/chat", ChatLive, :index
         end
 
         post "/users/update-password", UserSessionController, :update_password
+        get "/payments/downloads/:id", PaymentDownloadController, :show
       end
     end
   end

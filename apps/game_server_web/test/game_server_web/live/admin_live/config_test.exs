@@ -56,19 +56,18 @@ defmodule GameServerWeb.AdminLive.ConfigTest do
     System.put_env("POSTGRES_USER", "postgres")
     System.put_env("POSTGRES_DB", "game_server_test")
     System.put_env("POSTGRES_PASSWORD", "pg_secret_very_long")
-    System.put_env("STRIPE_SECRET_KEY", "sk_test_config_123456")
-    System.put_env("STRIPE_WEBHOOK_SECRET", "whsec_config_123456")
-    System.put_env("PAYMENTS_ENVIRONMENT", "test")
+    System.put_env("STRIPE_SANDBOX_SECRET_KEY", "sk_test_config_123456")
+    System.put_env("STRIPE_SANDBOX_WEBHOOK_SECRET", "whsec_config_123456")
+    System.put_env("STRIPE_API_VERSION", "2022-11-15")
+    System.put_env("PAYMENTS_ENVIRONMENT", "sandbox")
     System.put_env("GOOGLE_PLAY_PACKAGE_NAME", "com.example.game")
     System.put_env("GOOGLE_PLAY_ACCESS_TOKEN", "google_play_access_token")
     System.put_env("APPLE_BUNDLE_ID", "com.example.game")
     System.put_env("APPLE_ISSUER_ID", "apple_issuer_id")
     System.put_env("APPLE_KEY_ID", "apple_key_id")
     System.put_env("APPLE_PRIVATE_KEY", "apple_private_key_value")
-    System.put_env("APPLE_ENVIRONMENT", "sandbox")
     System.put_env("STEAM_WEB_API_KEY", "steam_payment_key")
     System.put_env("STEAM_APP_ID", "480")
-    System.put_env("STEAM_PAYMENTS_ENVIRONMENT", "sandbox")
 
     on_exit(fn ->
       for k <- [
@@ -89,8 +88,9 @@ defmodule GameServerWeb.AdminLive.ConfigTest do
             "POSTGRES_USER",
             "POSTGRES_DB",
             "POSTGRES_PASSWORD",
-            "STRIPE_SECRET_KEY",
-            "STRIPE_WEBHOOK_SECRET",
+            "STRIPE_SANDBOX_SECRET_KEY",
+            "STRIPE_SANDBOX_WEBHOOK_SECRET",
+            "STRIPE_API_VERSION",
             "PAYMENTS_ENVIRONMENT",
             "GOOGLE_PLAY_PACKAGE_NAME",
             "GOOGLE_PLAY_ACCESS_TOKEN",
@@ -98,10 +98,8 @@ defmodule GameServerWeb.AdminLive.ConfigTest do
             "APPLE_ISSUER_ID",
             "APPLE_KEY_ID",
             "APPLE_PRIVATE_KEY",
-            "APPLE_ENVIRONMENT",
             "STEAM_WEB_API_KEY",
-            "STEAM_APP_ID",
-            "STEAM_PAYMENTS_ENVIRONMENT"
+            "STEAM_APP_ID"
           ] do
         System.delete_env(k)
       end
@@ -160,7 +158,10 @@ defmodule GameServerWeb.AdminLive.ConfigTest do
     assert html =~ "GOOGLE_CLIENT_ID"
     assert html =~ "DEVICE_AUTH_ENABLED"
     assert html =~ "Payment Providers"
-    assert html =~ "STRIPE_SECRET_KEY"
+    assert html =~ "STRIPE_SANDBOX_SECRET_KEY"
+    assert html =~ "STRIPE_SANDBOX_WEBHOOK_SECRET"
+    assert html =~ "STRIPE_API_VERSION"
+    assert html =~ "2022-11-15"
     assert html =~ "GOOGLE_PLAY_PACKAGE_NAME"
     assert html =~ "APPLE_BUNDLE_ID"
     assert html =~ "STEAM_WEB_API_KEY"

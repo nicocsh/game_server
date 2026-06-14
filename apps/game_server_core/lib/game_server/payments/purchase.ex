@@ -55,7 +55,6 @@ defmodule GameServer.Payments.Purchase do
     field :expires_at, :utc_datetime
     field :revoked_at, :utc_datetime
 
-    has_many :wallet_ledger_entries, GameServer.Payments.WalletLedgerEntry
     has_many :entitlements, GameServer.Payments.Entitlement, foreign_key: :source_purchase_id
 
     timestamps(type: :utc_datetime)

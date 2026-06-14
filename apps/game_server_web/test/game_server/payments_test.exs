@@ -6,7 +6,6 @@ defmodule GameServer.PaymentsTest do
   alias GameServer.Payments.Entitlement
   alias GameServer.Payments.ProviderEvent
   alias GameServer.Payments.Purchase
-  alias GameServer.Payments.WalletLedgerEntry
 
   defmodule StoreAdapter do
     def validate_purchase(_user, attrs) do
@@ -84,24 +83,30 @@ defmodule GameServer.PaymentsTest do
   end
 
   describe "fulfillment" do
-    test "currency purchases grant wallet balance once" do
+    test "consumable purchases complete once and rely on hooks for game grants" do
+      capture_payment_hooks()
+
       user = AccountsFixtures.user_fixture()
-      {_product, provider_product} = create_currency_provider_product("stripe", "price_coins")
+      {_product, provider_product} = create_consumable_provider_product("stripe", "price_coins")
 
       assert {:ok, %Purchase{} = purchase} =
                Payments.create_purchase(user, provider_product, %{
-                 "provider_transaction_id" => "cs_test_currency"
+                 "provider_transaction_id" => "cs_test_consumable"
                })
 
       assert {:ok, %Purchase{status: "completed"} = completed} =
                Payments.fulfill_purchase(purchase, %{"provider" => "stripe"})
 
-      assert Payments.wallet_balance(user.id, "coins") == 100
+      assert Repo.aggregate(Entitlement, :count, :id) == 0
+      assert_receive {:payment_purchase_fulfilled, purchase_id, user_id}, 1_000
+      assert purchase_id == purchase.id
+      assert user_id == user.id
+
+      assert_receive {:payment_hook_item_grant, ^user_id, product_id}, 1_000
+      assert product_id == provider_product.product_id
 
       assert {:ok, %Purchase{status: "completed"}} = Payments.fulfill_purchase(completed)
-      assert Payments.wallet_balance(user.id, "coins") == 100
-
-      assert Repo.aggregate(WalletLedgerEntry, :count, :id) == 1
+      assert Repo.aggregate(Entitlement, :count, :id) == 0
     end
 
     test "entitlement purchases create one active entitlement and revoke cleanly" do
@@ -217,7 +222,7 @@ defmodule GameServer.PaymentsTest do
     test "validated receipts create fulfilled purchases and reject replay across users" do
       user = AccountsFixtures.user_fixture()
       other_user = AccountsFixtures.user_fixture()
-      {_product, provider_product} = create_currency_provider_product("apple", "coins_pack")
+      {_product, provider_product} = create_consumable_provider_product("apple", "coins_pack")
 
       attrs = %{
         "product_id" => provider_product.external_id,
@@ -232,28 +237,28 @@ defmodule GameServer.PaymentsTest do
 
       assert purchase.status == "completed"
       assert purchase.provider_transaction_id == "apple_tx_1"
-      assert Payments.wallet_balance(user.id, "coins") == 100
+      assert Repo.aggregate(Entitlement, :count, :id) == 0
 
       assert {:ok, %{purchase: same_purchase, seen_before: true}} =
                Payments.validate_store_purchase(user, "apple", attrs)
 
       assert same_purchase.id == purchase.id
-      assert Payments.wallet_balance(user.id, "coins") == 100
+      assert Repo.aggregate(Entitlement, :count, :id) == 0
 
       assert {:error, :receipt_already_used} =
                Payments.validate_store_purchase(other_user, "apple", attrs)
     end
   end
 
-  defp create_currency_provider_product(provider, external_id) do
+  defp create_consumable_provider_product(provider, external_id) do
     sku = unique_sku("coins")
 
     {:ok, product} =
       Payments.create_product(%{
         "sku" => sku,
         "title" => "100 Coins",
-        "kind" => "currency",
-        "grant_config" => %{"currency_key" => "coins", "amount" => 100}
+        "kind" => "consumable",
+        "grant_config" => %{"hook_payload" => %{"coins" => 100}}
       })
 
     {:ok, provider_product} =

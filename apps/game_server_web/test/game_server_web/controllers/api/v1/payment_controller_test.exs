@@ -6,6 +6,10 @@ defmodule GameServerWeb.Api.V1.PaymentControllerTest do
   alias GameServerWeb.Auth.Guardian
 
   defmodule StripeAdapter do
+    def create_checkout_session(_purchase, %{external_id: "price_fail" <> _rest}, _attrs) do
+      {:error, :stripe_not_configured}
+    end
+
     def create_checkout_session(purchase, _provider_product, _attrs) do
       {:ok,
        %{
@@ -114,25 +118,6 @@ defmodule GameServerWeb.Api.V1.PaymentControllerTest do
     end
   end
 
-  describe "GET /api/v1/payments/wallet" do
-    test "requires auth and returns balances", %{conn: conn} do
-      user = AccountsFixtures.user_fixture()
-      {_product, provider_product} = create_provider_product("stripe", "price_wallet")
-      {:ok, purchase} = Payments.create_purchase(user, provider_product)
-      {:ok, _purchase} = Payments.fulfill_purchase(purchase)
-
-      assert conn |> get("/api/v1/payments/wallet") |> response(401)
-
-      response =
-        conn
-        |> auth_conn(user)
-        |> get("/api/v1/payments/wallet")
-        |> json_response(200)
-
-      assert response["data"] == %{"coins" => 100}
-    end
-  end
-
   describe "POST /api/v1/payments/checkout/stripe" do
     test "creates a pending purchase and returns checkout session", %{conn: conn} do
       user = AccountsFixtures.user_fixture()
@@ -151,6 +136,112 @@ defmodule GameServerWeb.Api.V1.PaymentControllerTest do
       assert response["data"]["checkout_url"] =~ "https://checkout.test/session/"
       assert response["data"]["provider_session_id"] =~ "cs_test_"
       assert response["data"]["purchase"]["status"] == "requires_action"
+    end
+
+    test "rejects multi-quantity checkout for entitlement products", %{conn: conn} do
+      user = AccountsFixtures.user_fixture()
+
+      {product, _provider_product} =
+        create_entitlement_provider_product("stripe", "price_artbook")
+
+      response =
+        conn
+        |> auth_conn(user)
+        |> post("/api/v1/payments/checkout/stripe", %{
+          "product_sku" => product.sku,
+          "quantity" => 100,
+          "success_url" => "https://example.test/success",
+          "cancel_url" => "https://example.test/cancel"
+        })
+        |> json_response(400)
+
+      assert response["error"] == "quantity_not_allowed"
+    end
+
+    test "rejects checkout for already-owned entitlement products", %{conn: conn} do
+      user = AccountsFixtures.user_fixture()
+      {product, provider_product} = create_entitlement_provider_product("stripe", "price_artbook")
+
+      {:ok, purchase} =
+        Payments.create_purchase(user, provider_product, %{
+          "provider_transaction_id" => "cs_owned_artbook"
+        })
+
+      {:ok, _completed} = Payments.fulfill_purchase(purchase)
+
+      response =
+        conn
+        |> auth_conn(user)
+        |> post("/api/v1/payments/checkout/stripe", %{
+          "product_sku" => product.sku,
+          "success_url" => "https://example.test/success",
+          "cancel_url" => "https://example.test/cancel"
+        })
+        |> json_response(400)
+
+      assert response["error"] == "already_owned"
+    end
+
+    test "rejects duplicate in-progress checkout for entitlement products", %{conn: conn} do
+      user = AccountsFixtures.user_fixture()
+
+      {product, _provider_product} =
+        create_entitlement_provider_product("stripe", "price_artbook")
+
+      first =
+        conn
+        |> auth_conn(user)
+        |> post("/api/v1/payments/checkout/stripe", %{
+          "product_sku" => product.sku,
+          "success_url" => "https://example.test/success",
+          "cancel_url" => "https://example.test/cancel"
+        })
+        |> json_response(200)
+
+      assert first["data"]["purchase"]["status"] == "requires_action"
+
+      response =
+        build_conn()
+        |> auth_conn(user)
+        |> post("/api/v1/payments/checkout/stripe", %{
+          "product_sku" => product.sku,
+          "success_url" => "https://example.test/success",
+          "cancel_url" => "https://example.test/cancel"
+        })
+        |> json_response(400)
+
+      assert response["error"] == "purchase_already_in_progress"
+    end
+
+    test "failed checkout creation marks purchase failed and allows retry", %{conn: conn} do
+      user = AccountsFixtures.user_fixture()
+      {product, _provider_product} = create_provider_product("stripe", "price_fail")
+
+      params = %{
+        "product_sku" => product.sku,
+        "success_url" => "https://example.test/success",
+        "cancel_url" => "https://example.test/cancel"
+      }
+
+      first =
+        conn
+        |> auth_conn(user)
+        |> post("/api/v1/payments/checkout/stripe", params)
+        |> json_response(400)
+
+      assert first["error"] == "stripe_not_configured"
+
+      second =
+        build_conn()
+        |> auth_conn(user)
+        |> post("/api/v1/payments/checkout/stripe", params)
+        |> json_response(400)
+
+      assert second["error"] == "stripe_not_configured"
+
+      purchases = Payments.list_user_purchases(user.id)
+      assert length(purchases) == 2
+      assert Enum.all?(purchases, &(&1.status == "failed"))
     end
   end
 
@@ -181,7 +272,6 @@ defmodule GameServerWeb.Api.V1.PaymentControllerTest do
         |> json_response(200)
 
       assert finalized["data"]["purchase"]["status"] == "completed"
-      assert Payments.wallet_balance(user.id, "coins") == 100
     end
   end
 
@@ -220,7 +310,6 @@ defmodule GameServerWeb.Api.V1.PaymentControllerTest do
         |> json_response(200)
 
       assert response == %{"ok" => true, "status" => "processed"}
-      assert Payments.wallet_balance(user.id, "coins") == 100
 
       charge_body =
         Jason.encode!(%{
@@ -265,7 +354,6 @@ defmodule GameServerWeb.Api.V1.PaymentControllerTest do
 
       assert refund_response == %{"ok" => true, "status" => "processed"}
       assert Payments.get_purchase(purchase.id).status == "refunded"
-      assert Payments.wallet_balance(user.id, "coins") == 100
 
       duplicate_response =
         build_conn()
@@ -274,7 +362,6 @@ defmodule GameServerWeb.Api.V1.PaymentControllerTest do
         |> json_response(200)
 
       assert duplicate_response == %{"ok" => true, "status" => "duplicate"}
-      assert Payments.wallet_balance(user.id, "coins") == 100
     end
   end
 
@@ -365,7 +452,6 @@ defmodule GameServerWeb.Api.V1.PaymentControllerTest do
 
       assert response["data"]["seen_before"] == false
       assert response["data"]["purchase"]["status"] == "completed"
-      assert Payments.wallet_balance(user.id, "coins") == 100
     end
   end
 
@@ -376,8 +462,8 @@ defmodule GameServerWeb.Api.V1.PaymentControllerTest do
       Payments.create_product(%{
         "sku" => sku,
         "title" => "100 Coins",
-        "kind" => "currency",
-        "grant_config" => %{"currency_key" => "coins", "amount" => 100}
+        "kind" => "consumable",
+        "grant_config" => %{"hook_payload" => %{"coins" => 100}}
       })
 
     {:ok, provider_product} =
@@ -388,6 +474,30 @@ defmodule GameServerWeb.Api.V1.PaymentControllerTest do
           external_id <> "_" <> Integer.to_string(System.unique_integer([:positive])),
         "currency" => "USD",
         "unit_amount" => 199
+      })
+
+    {product, provider_product}
+  end
+
+  defp create_entitlement_provider_product(provider, external_id) do
+    sku = "artbook_#{System.unique_integer([:positive])}"
+
+    {:ok, product} =
+      Payments.create_product(%{
+        "sku" => sku,
+        "title" => "Digital Artbook",
+        "kind" => "entitlement",
+        "grant_config" => %{"entitlement_key" => sku}
+      })
+
+    {:ok, provider_product} =
+      Payments.create_provider_product(%{
+        "product_id" => product.id,
+        "provider" => provider,
+        "external_id" =>
+          external_id <> "_" <> Integer.to_string(System.unique_integer([:positive])),
+        "currency" => "USD",
+        "unit_amount" => 999
       })
 
     {product, provider_product}

@@ -85,9 +85,9 @@
               )}
             </li>
             <li>
-              <strong>{doc_text("Wallet ledger:")}</strong>
+              <strong>{doc_text("Consumables:")}</strong>
               {doc_text(
-                "Append-only currency grants for audit history. Reversals do not delete old rows."
+                "One-time rewards such as coins or item packs. Grant these in hooks so your game economy stays the source of truth."
               )}
             </li>
           </ul>
@@ -97,25 +97,125 @@
       <div class="step">
         <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
           <span class="badge badge-primary">2</span>
-          {doc_text("Stripe Test And Live Mode")}
+          {doc_text("Stripe Sandbox And Live Mode")}
         </h3>
         <div class="ml-8 space-y-3">
           <p>
             {doc_text(
-              "Stripe supports non-real test mode. Use test keys for sandbox purchases and live keys only when ready to charge real payment methods."
+              "PAYMENTS_ENVIRONMENT is the global payment mode. Use sandbox for non-real provider flows, and production only when ready to charge real payment methods."
             )}
           </p>
           <div class="bg-base-200 p-4 rounded-lg font-mono text-sm overflow-auto">
             <div class="space-y-2">
-              <div><span class="code-comment"># Stripe test/sandbox mode</span></div>
-              <div>STRIPE_SECRET_KEY=sk_test_...</div>
-              <div>STRIPE_WEBHOOK_SECRET=whsec_...</div>
-              <div>PAYMENTS_ENVIRONMENT=test</div>
+              <div>
+                <span class="code-comment"># Stripe sandbox mode (Stripe test keys)</span>
+              </div>
+              <div>PAYMENTS_ENVIRONMENT=sandbox</div>
+              <div>STRIPE_API_VERSION=2022-11-15</div>
+              <div>STRIPE_SANDBOX_SECRET_KEY=sk_test_...</div>
+              <div>STRIPE_SANDBOX_WEBHOOK_SECRET=whsec_...</div>
               <div></div>
               <div><span class="code-comment"># Stripe live mode</span></div>
-              <div>STRIPE_SECRET_KEY=sk_live_...</div>
-              <div>STRIPE_WEBHOOK_SECRET=whsec_...</div>
               <div>PAYMENTS_ENVIRONMENT=production</div>
+              <div>STRIPE_API_VERSION=2022-11-15</div>
+              <div>STRIPE_PRODUCTION_SECRET_KEY=sk_live_...</div>
+              <div>STRIPE_PRODUCTION_WEBHOOK_SECRET=whsec_...</div>
+            </div>
+          </div>
+          <ul class="list-disc list-inside text-sm text-base-content/80 space-y-2">
+            <li>
+              {doc_text("Copy the Stripe API secret key from")}
+              <code class="font-mono">Developers / Workbench &gt; API keys</code>. {doc_text(
+                "Use a"
+              )}
+              <code class="font-mono">sk_test_...</code>
+              {doc_text("key for sandbox and a")}
+              <code class="font-mono">sk_live_...</code>
+              {doc_text("key for production.")}
+            </li>
+            <li>
+              {doc_text(
+                "The webhook secret is not the API key. Copy the webhook signing secret from the Stripe webhook endpoint details after the endpoint exists."
+              )}
+            </li>
+            <li>
+              <code class="font-mono">STRIPE_API_VERSION</code>
+              {doc_text(
+                "is optional. If omitted, the Stripe SDK default is 2022-11-15; the webhook endpoint should use the same version."
+              )}
+            </li>
+            <li>
+              {doc_text(
+                "Live secret keys may be shown only once when created. Store them in deployment secrets or environment variables, never in source control."
+              )}
+            </li>
+          </ul>
+          <div class="space-y-3">
+            <h4 class="font-semibold">{doc_text("Create Stripe Webhook Endpoint")}</h4>
+            <ol class="list-decimal list-inside text-sm text-base-content/80 space-y-2">
+              <li>
+                {doc_text("Open Stripe Dashboard")}
+                <code class="font-mono">Developers / Workbench &gt; Webhooks</code>.
+              </li>
+              <li>{doc_text("Click Add endpoint.")}</li>
+              <li>
+                {doc_text("Set endpoint URL to")}
+                <code class="font-mono">https://your-domain.com/api/v1/payments/webhooks/stripe</code>.
+              </li>
+              <li>
+                {doc_text("For API version, choose")}
+                <code class="font-mono">2022-11-15</code>
+                {doc_text(
+                  "for the default integration, or the exact value configured in STRIPE_API_VERSION. Checkout requests use stripity_stripe with the same API version."
+                )}
+              </li>
+              <li>{doc_text("Select only the events this server handles:")}</li>
+            </ol>
+            <div class="bg-base-200 p-4 rounded-lg font-mono text-sm overflow-auto">
+              <pre phx-no-curly-interpolation>checkout.session.completed
+checkout.session.async_payment_succeeded
+checkout.session.expired
+charge.succeeded
+charge.refunded
+refund.created
+refund.updated
+charge.refund.updated
+charge.dispute.created
+charge.dispute.funds_withdrawn</pre>
+            </div>
+            <ol
+              class="list-decimal list-inside text-sm text-base-content/80 space-y-2"
+              start="6"
+            >
+              <li>{doc_text("Save the endpoint.")}</li>
+              <li>
+                {doc_text("Open endpoint details and copy the signing secret starting with")}
+                <code class="font-mono">whsec_...</code>.
+              </li>
+              <li>
+                {doc_text("Set")}
+                <code class="font-mono">STRIPE_SANDBOX_WEBHOOK_SECRET</code>
+                {doc_text("or")}
+                <code class="font-mono">STRIPE_PRODUCTION_WEBHOOK_SECRET</code>
+                {doc_text("to that value, matching")}
+                <code class="font-mono">PAYMENTS_ENVIRONMENT</code>.
+              </li>
+            </ol>
+            <p class="text-sm text-base-content/70">
+              {doc_text(
+                "Do not enable all Stripe events. Extra events add webhook traffic, stored provider events, retries, and logs without changing purchase fulfillment."
+              )}
+            </p>
+            <p class="text-sm text-base-content/70">
+              {doc_text(
+                "Do not choose Latest API version without testing. If you change STRIPE_API_VERSION, update the webhook endpoint to the same version and run Stripe checkout/webhook tests before production."
+              )}
+            </p>
+            <div class="bg-base-200 p-4 rounded-lg font-mono text-sm overflow-auto">
+              <pre phx-no-curly-interpolation># Local testing with Stripe CLI
+stripe listen --forward-to localhost:4000/api/v1/payments/webhooks/stripe
+
+# Use printed whsec_... as STRIPE_SANDBOX_WEBHOOK_SECRET</pre>
             </div>
           </div>
           <p class="text-sm text-base-content/70">
@@ -157,7 +257,9 @@
               {doc_text("Create provider SKUs with provider")}
               <code class="font-mono">stripe</code>
               {doc_text("and external ID")}
-              <code class="font-mono">price_...</code>.
+              <code class="font-mono">price_...</code>. {doc_text(
+                "Use the Stripe Price ID, not the Stripe Product ID."
+              )}
             </li>
             <li>
               {doc_text("Client calls")}
@@ -175,6 +277,16 @@
               {doc_text("Server completes, refunds, or revokes purchase from webhook state.")}
             </li>
           </ol>
+          <p class="text-sm text-base-content/70">
+            {doc_text(
+              "Entitlement and subscription products are buy-once while active: checkout quantity must be 1, and users with an active grant or in-progress checkout cannot start another checkout for that product. Consumables can be bought repeatedly."
+            )}
+          </p>
+          <p class="text-sm text-base-content/70">
+            {doc_text(
+              "Currency display is handled by Stripe Checkout. Enable Stripe Adaptive Pricing in Stripe Dashboard, or configure multi-currency Prices with currency options. The provider SKU still stores the Stripe Price ID."
+            )}
+          </p>
           <div class="bg-base-200 p-4 rounded-lg font-mono text-sm overflow-auto">
             <pre phx-no-curly-interpolation>{
   "product_sku": "coins_100",
@@ -188,6 +300,45 @@
       <div class="step">
         <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
           <span class="badge badge-primary">4</span>
+          {doc_text("User Store And Downloads")}
+        </h3>
+        <div class="ml-8 space-y-3">
+          <p>
+            {doc_text(
+              "Authenticated users can open /store to test browser purchases. Stripe rows start Checkout; Apple, Google, and Steam rows remain platform-SDK/API flows."
+            )}
+          </p>
+          <ul class="list-disc list-inside text-sm text-base-content/80 space-y-2">
+            <li>
+              <code class="font-mono">/users/settings?tab=payments</code>
+              {doc_text("shows order history, active entitlements, and downloads.")}
+            </li>
+            <li>
+              {doc_text(
+                "Consumables such as coin packs stay visible in purchase history. Use after_purchase_fulfilled/1 to grant coins or items in your game hooks."
+              )}
+            </li>
+          </ul>
+          <div class="bg-base-200 p-4 rounded-lg font-mono text-sm overflow-auto">
+            <pre phx-no-curly-interpolation>{
+  "entitlement_key": "starter_pack",
+  "download": {
+    "asset_key": "starter_pack.zip",
+    "filename": "starter_pack.zip"
+  }
+}</pre>
+          </div>
+          <p class="text-sm text-base-content/70">
+            {doc_text(
+              "Download assets are served from the payment downloads directory or priv/downloads. Asset keys must be file names, and only active entitlement owners can download."
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
+        <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+          <span class="badge badge-primary">5</span>
           {doc_text("Refunds, Disputes, And Reversals")}
         </h3>
         <div class="ml-8 space-y-3">
@@ -240,20 +391,21 @@
 
       <div class="step">
         <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
-          <span class="badge badge-primary">5</span>
+          <span class="badge badge-primary">6</span>
           {doc_text("Play Store, App Store, And Steam")}
         </h3>
         <div class="ml-8 space-y-5">
           <p>
             {doc_text(
-              "Google, Apple, and Steam adapters are built in. They store normalized validation results in the same purchases, entitlements, wallet, and provider event tables."
+              "Google, Apple, and Steam adapters are built in. They store normalized validation results in the same purchases, entitlements, and provider event tables."
             )}
           </p>
 
           <div>
             <h4 class="font-semibold mb-2">{doc_text("Google Play")}</h4>
             <div class="bg-base-200 font-mono text-sm p-4 rounded-lg overflow-auto highlight-code">
-              <pre phx-no-curly-interpolation>GOOGLE_PLAY_PACKAGE_NAME=com.example.game
+              <pre phx-no-curly-interpolation>PAYMENTS_ENVIRONMENT=sandbox
+GOOGLE_PLAY_PACKAGE_NAME=com.example.game
 GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH=/run/secrets/google-play-service-account.json
 GOOGLE_PLAY_RTDN_TOKEN=shared_push_token
 GOOGLE_PLAY_AUTO_ACKNOWLEDGE=true</pre>
@@ -311,11 +463,11 @@ GOOGLE_PLAY_AUTO_ACKNOWLEDGE=true</pre>
           <div>
             <h4 class="font-semibold mb-2">{doc_text("App Store")}</h4>
             <div class="bg-base-200 font-mono text-sm p-4 rounded-lg overflow-auto highlight-code">
-              <pre phx-no-curly-interpolation>APPLE_BUNDLE_ID=com.example.game
+              <pre phx-no-curly-interpolation>PAYMENTS_ENVIRONMENT=sandbox
+APPLE_BUNDLE_ID=com.example.game
 APPLE_ISSUER_ID=app_store_server_api_issuer_id
 APPLE_KEY_ID=app_store_server_api_key_id
-APPLE_PRIVATE_KEY_PATH=/run/secrets/AuthKey_ABC123DEFG.p8
-APPLE_ENVIRONMENT=sandbox</pre>
+APPLE_PRIVATE_KEY_PATH=/run/secrets/AuthKey_ABC123DEFG.p8</pre>
             </div>
             <ol class="list-decimal list-inside text-sm text-base-content/80 space-y-2 mt-3">
               <li>
@@ -367,9 +519,9 @@ APPLE_ENVIRONMENT=sandbox</pre>
           <div>
             <h4 class="font-semibold mb-2">{doc_text("Steam MicroTxn")}</h4>
             <div class="bg-base-200 font-mono text-sm p-4 rounded-lg overflow-auto highlight-code">
-              <pre phx-no-curly-interpolation>STEAM_WEB_API_KEY=steam_web_api_key
-STEAM_APP_ID=480
-STEAM_PAYMENTS_ENVIRONMENT=sandbox</pre>
+              <pre phx-no-curly-interpolation>PAYMENTS_ENVIRONMENT=sandbox
+STEAM_WEB_API_KEY=steam_web_api_key
+STEAM_APP_ID=480</pre>
             </div>
             <p class="text-sm text-base-content/70 mt-3">
               {doc_text("If")}
@@ -417,13 +569,13 @@ STEAM_PAYMENTS_ENVIRONMENT=sandbox</pre>
 
       <div class="step">
         <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
-          <span class="badge badge-primary">6</span>
+          <span class="badge badge-primary">7</span>
           {doc_text("Admin And Hooks")}
         </h3>
         <div class="ml-8 space-y-3">
           <p>
             {doc_text(
-              "Use Admin > Payments to view provider status, products, provider SKUs, purchases, entitlements, wallet ledger entries, webhook events, and reconciliation cursors. Use Admin > Config to view masked provider environment variables."
+              "Use Admin > Payments to view provider status, products, provider SKUs, purchases, entitlements, webhook events, and reconciliation cursors. Use Admin > Config to view masked provider environment variables."
             )}
           </p>
           <div class="bg-base-200 font-mono text-sm p-4 rounded-lg overflow-auto highlight-code">

@@ -3,8 +3,10 @@ defmodule GameServer.Payments.Providers.Steam do
   Steam MicroTxn adapter.
 
   Supports InitTxn, FinalizeTxn, QueryTxn, and GetReport through Steamworks Web
-  API. Use `STEAM_PAYMENTS_ENVIRONMENT=sandbox` while testing.
+  API. Use `PAYMENTS_ENVIRONMENT=sandbox` while testing.
   """
+
+  alias GameServer.Payments.ProviderConfig
 
   @production_base_url "https://partner.steam-api.com/ISteamMicroTxn"
   @sandbox_base_url "https://partner.steam-api.com/ISteamMicroTxnSandbox"
@@ -209,7 +211,6 @@ defmodule GameServer.Payments.Providers.Steam do
     config_value("STEAM_MICROTXN_BASE_URL", :steam_microtxn_base_url) ||
       case steam_environment() do
         "sandbox" -> @sandbox_base_url
-        "test" -> @sandbox_base_url
         _ -> @production_base_url
       end
   end
@@ -267,9 +268,7 @@ defmodule GameServer.Payments.Providers.Steam do
   defp app_id, do: config_value("STEAM_APP_ID", :steam_app_id)
 
   defp steam_environment do
-    config_value("STEAM_PAYMENTS_ENVIRONMENT", :steam_payments_environment) ||
-      System.get_env("PAYMENTS_ENVIRONMENT") ||
-      Application.get_env(:game_server_core, :payments_environment, "production")
+    ProviderConfig.environment()
   end
 
   defp http_client do

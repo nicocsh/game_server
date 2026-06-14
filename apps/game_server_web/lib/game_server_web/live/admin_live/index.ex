@@ -459,7 +459,6 @@ defmodule GameServerWeb.AdminLive.Index do
                   <div>Products: {@payments_stats.products}</div>
                   <div>Provider SKUs: {@payments_stats.provider_products}</div>
                   <div>Active entitlements: {@payments_stats.active_entitlements}</div>
-                  <div>Wallet entries: {@payments_stats.wallet_entries}</div>
                 </div>
               </div>
             </div>

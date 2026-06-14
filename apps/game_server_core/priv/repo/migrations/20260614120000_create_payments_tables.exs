@@ -89,25 +89,6 @@ defmodule GameServer.Repo.Migrations.CreatePaymentsTables do
     create index(:entitlements, [:status])
     create unique_index(:entitlements, [:user_id, :key])
 
-    create table(:wallet_ledger_entries) do
-      add :user_id, references(:users, on_delete: :delete_all), null: false
-      add :purchase_id, references(:purchases, on_delete: :nilify_all)
-      add :currency_key, :string, null: false
-      add :delta, :integer, null: false
-      add :reason, :string, null: false, default: "purchase"
-      add :metadata, :map, null: false, default: %{}
-
-      timestamps(type: :utc_datetime)
-    end
-
-    create index(:wallet_ledger_entries, [:user_id, :currency_key])
-    create index(:wallet_ledger_entries, [:purchase_id])
-
-    create unique_index(:wallet_ledger_entries, [:purchase_id, :currency_key],
-             where: "purchase_id IS NOT NULL",
-             name: :wallet_ledger_unique_purchase_currency
-           )
-
     create table(:provider_events) do
       add :provider, :string, null: false
       add :event_id, :string, null: false

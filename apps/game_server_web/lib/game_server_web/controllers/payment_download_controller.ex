@@ -1,0 +1,74 @@
+defmodule GameServerWeb.PaymentDownloadController do
+  use GameServerWeb, :controller
+
+  alias GameServer.Payments
+
+  def show(conn, %{"id" => id}) do
+    user = conn.assigns.current_scope.user
+
+    with {entitlement_id, ""} <- Integer.parse(id),
+         entitlement when not is_nil(entitlement) <- find_entitlement(user.id, entitlement_id),
+         {:ok, path, filename} <- download_file(entitlement) do
+      send_download(conn, {:file, path}, filename: filename)
+    else
+      _ ->
+        conn
+        |> put_status(:not_found)
+        |> text("Not found")
+    end
+  end
+
+  defp find_entitlement(user_id, entitlement_id) do
+    user_id
+    |> Payments.list_user_entitlements()
+    |> Enum.find(&(&1.id == entitlement_id))
+  end
+
+  defp download_file(entitlement) do
+    case download_config(entitlement) do
+      %{} = download ->
+        asset_key = map_value(download, "asset_key") || map_value(download, "file")
+        filename = map_value(download, "filename") || asset_key
+
+        with true <- is_binary(asset_key) and asset_key != "",
+             true <- safe_basename?(asset_key),
+             downloads_dir <- downloads_dir(),
+             path <- Path.join(downloads_dir, asset_key),
+             true <- File.regular?(path) do
+          {:ok, path, filename || Path.basename(asset_key)}
+        else
+          _ -> {:error, :not_found}
+        end
+
+      _ ->
+        {:error, :not_found}
+    end
+  end
+
+  defp download_config(entitlement) do
+    entitlement.metadata
+    |> map_value("download")
+    |> fallback(map_value(entitlement.product && entitlement.product.grant_config, "download"))
+    |> fallback(map_value(entitlement.product && entitlement.product.metadata, "download"))
+  end
+
+  defp downloads_dir do
+    Application.get_env(:game_server_web, :payment_downloads_dir) ||
+      Application.app_dir(:game_server_web, "priv/downloads")
+  end
+
+  defp map_value(nil, _key), do: nil
+  defp map_value(map, key) when is_map(map), do: map[key] || atom_map_value(map, key)
+  defp map_value(_value, _key), do: nil
+
+  defp atom_map_value(map, "asset_key"), do: map[:asset_key]
+  defp atom_map_value(map, "download"), do: map[:download]
+  defp atom_map_value(map, "file"), do: map[:file]
+  defp atom_map_value(map, "filename"), do: map[:filename]
+  defp atom_map_value(_map, _key), do: nil
+
+  defp fallback(nil, value), do: value
+  defp fallback(value, _fallback), do: value
+
+  defp safe_basename?(asset_key), do: Path.basename(asset_key) == asset_key
+end

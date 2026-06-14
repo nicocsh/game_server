@@ -9,17 +9,17 @@ defmodule GameServerWeb.AdminLive.PaymentsTest do
   alias GameServer.Repo
 
   setup do
-    original_secret = System.get_env("STRIPE_SECRET_KEY")
-    original_webhook = System.get_env("STRIPE_WEBHOOK_SECRET")
+    original_secret = System.get_env("STRIPE_SANDBOX_SECRET_KEY")
+    original_webhook = System.get_env("STRIPE_SANDBOX_WEBHOOK_SECRET")
     original_environment = System.get_env("PAYMENTS_ENVIRONMENT")
 
-    System.put_env("STRIPE_SECRET_KEY", "sk_test_admin_payments_123456")
-    System.put_env("STRIPE_WEBHOOK_SECRET", "whsec_admin_payments_123456")
-    System.put_env("PAYMENTS_ENVIRONMENT", "test")
+    System.put_env("STRIPE_SANDBOX_SECRET_KEY", "sk_test_admin_payments_123456")
+    System.put_env("STRIPE_SANDBOX_WEBHOOK_SECRET", "whsec_admin_payments_123456")
+    System.put_env("PAYMENTS_ENVIRONMENT", "sandbox")
 
     on_exit(fn ->
-      restore_env("STRIPE_SECRET_KEY", original_secret)
-      restore_env("STRIPE_WEBHOOK_SECRET", original_webhook)
+      restore_env("STRIPE_SANDBOX_SECRET_KEY", original_secret)
+      restore_env("STRIPE_SANDBOX_WEBHOOK_SECRET", original_webhook)
       restore_env("PAYMENTS_ENVIRONMENT", original_environment)
     end)
 
@@ -29,7 +29,7 @@ defmodule GameServerWeb.AdminLive.PaymentsTest do
     %{admin: admin}
   end
 
-  test "admin can view payment config and ledger data", %{conn: conn, admin: admin} do
+  test "admin can view payment config and purchase data", %{conn: conn, admin: admin} do
     {product, provider_product} = create_provider_product("stripe", "price_admin_view")
     {:ok, purchase} = Payments.create_purchase(admin, provider_product)
     {:ok, _purchase} = Payments.fulfill_purchase(purchase)
@@ -39,14 +39,14 @@ defmodule GameServerWeb.AdminLive.PaymentsTest do
     assert html =~ "Payments"
     assert html =~ "Payment Providers"
     assert html =~ "configured"
-    assert html =~ "test"
+    assert html =~ "sandbox"
     refute html =~ "sk_test_admin_payments"
     refute html =~ "whsec_admin_payments"
     assert html =~ product.sku
     assert html =~ provider_product.external_id
     assert html =~ purchase.order_id
     assert html =~ "completed"
-    assert html =~ "Wallet Ledger"
+    refute html =~ "Wallet Ledger"
   end
 
   test "admin can create product and provider SKU", %{conn: conn, admin: admin} do
@@ -63,9 +63,9 @@ defmodule GameServerWeb.AdminLive.PaymentsTest do
         "sku" => product_sku,
         "title" => "Admin Created",
         "description" => "Created from admin",
-        "kind" => "currency",
+        "kind" => "consumable",
         "active" => "true",
-        "grant_config_json" => ~s({"currency_key":"coins","amount":25}),
+        "grant_config_json" => ~s({"hook_payload":{"coins":25}}),
         "metadata_json" => "{}"
       }
     )
@@ -104,8 +104,8 @@ defmodule GameServerWeb.AdminLive.PaymentsTest do
       Payments.create_product(%{
         "sku" => sku,
         "title" => "Admin Pay Product",
-        "kind" => "currency",
-        "grant_config" => %{"currency_key" => "coins", "amount" => 100}
+        "kind" => "consumable",
+        "grant_config" => %{"hook_payload" => %{"coins" => 100}}
       })
 
     {:ok, provider_product} =

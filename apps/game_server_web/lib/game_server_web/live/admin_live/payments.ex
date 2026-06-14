@@ -5,7 +5,7 @@ defmodule GameServerWeb.AdminLive.Payments do
   alias GameServer.Payments.Product
   alias GameServer.Payments.ProviderProduct
 
-  @sections ~w(products provider_products purchases entitlements wallet provider_events reconciliation_cursors)a
+  @sections ~w(products provider_products purchases entitlements provider_events reconciliation_cursors)a
   @default_page_size 25
 
   @impl true
@@ -37,7 +37,7 @@ defmodule GameServerWeb.AdminLive.Payments do
           <div>
             <h1 class="text-3xl font-bold">Payments</h1>
             <p class="mt-1 text-sm text-base-content/70">
-              Payment configuration, catalog, purchases, entitlements, wallet ledger, and provider events.
+              Payment configuration, catalog, purchases, entitlements, and provider events.
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
@@ -113,8 +113,6 @@ defmodule GameServerWeb.AdminLive.Payments do
                 <div class="font-mono text-right">{@stats.completed_purchases}</div>
                 <div>Entitlements</div>
                 <div class="font-mono text-right">{@stats.entitlements}</div>
-                <div>Wallet entries</div>
-                <div class="font-mono text-right">{@stats.wallet_entries}</div>
                 <div>Provider events</div>
                 <div class="font-mono text-right">{@stats.provider_events}</div>
               </div>
@@ -332,44 +330,6 @@ defmodule GameServerWeb.AdminLive.Payments do
         </div>
 
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <div class="card bg-base-200">
-            <div class="card-body">
-              <h2 class="card-title">Wallet Ledger ({@counts.wallet || 0})</h2>
-              <div class="overflow-x-auto mt-4">
-                <table class="table table-zebra w-full min-w-[48rem]">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>User</th>
-                      <th>Currency</th>
-                      <th>Delta</th>
-                      <th>Reason</th>
-                      <th>Purchase</th>
-                      <th>Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr :for={w <- @wallet} id={"admin-wallet-#{w.id}"}>
-                      <td class="font-mono text-xs">{w.id}</td>
-                      <td class="font-mono text-xs">{w.user_id}</td>
-                      <td class="font-mono text-xs">{w.currency_key}</td>
-                      <td class="font-mono text-xs">{w.delta}</td>
-                      <td class="text-xs">{w.reason}</td>
-                      <td class="font-mono text-xs">{w.purchase_id}</td>
-                      <td class="font-mono text-xs">{format_dt(w.inserted_at)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <.section_pager
-                section="wallet"
-                page={@pages.wallet}
-                total_pages={@total_pages.wallet || 1}
-                count={@counts.wallet || 0}
-              />
-            </div>
-          </div>
-
           <div class="card bg-base-200">
             <div class="card-body">
               <h2 class="card-title">Provider Events ({@counts.provider_events || 0})</h2>
@@ -759,7 +719,6 @@ defmodule GameServerWeb.AdminLive.Payments do
     |> reload_section(:provider_products)
     |> reload_section(:purchases)
     |> reload_section(:entitlements)
-    |> reload_section(:wallet)
     |> reload_section(:provider_events)
     |> reload_section(:reconciliation_cursors)
   end
@@ -782,9 +741,6 @@ defmodule GameServerWeb.AdminLive.Payments do
 
         :entitlements ->
           {Payments.list_admin_entitlements(opts), Payments.count_entitlements()}
-
-        :wallet ->
-          {Payments.list_admin_wallet_ledger(opts), Payments.count_wallet_ledger_entries()}
 
         :provider_events ->
           {Payments.list_provider_events(opts), Payments.count_provider_events()}

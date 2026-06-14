@@ -1,21 +1,22 @@
 defmodule GameServer.Payments do
   @moduledoc """
-  Payment catalog, purchase ledger, entitlements, and wallet grants.
+  Payment catalog, purchase ledger, and entitlements.
 
   Provider-specific integrations validate or create transactions, but this
   context remains the source of truth for what a user owns inside the game.
   """
 
   import Ecto.Query, warn: false
+  require Logger
 
   alias GameServer.Accounts.User
   alias GameServer.Payments.Entitlement
   alias GameServer.Payments.Product
   alias GameServer.Payments.ProviderEvent
+  alias GameServer.Payments.ProviderConfig
   alias GameServer.Payments.ProviderProduct
   alias GameServer.Payments.Purchase
   alias GameServer.Payments.ReconciliationCursor
-  alias GameServer.Payments.WalletLedgerEntry
   alias GameServer.Repo
 
   @pubsub GameServer.PubSub
@@ -306,16 +307,23 @@ defmodule GameServer.Payments do
     attrs = normalize_params(attrs)
 
     with {:ok, provider_product} <- resolve_provider_product("stripe", attrs),
-         {:ok, purchase} <- create_purchase(user, provider_product, attrs),
-         {:ok, session} <-
-           stripe_adapter().create_checkout_session(purchase, provider_product, attrs),
-         {:ok, updated_purchase} <- mark_purchase_requires_action(purchase, session) do
-      {:ok,
-       %{
-         purchase: updated_purchase,
-         checkout_url: session["url"],
-         provider_session_id: session["id"]
-       }}
+         :ok <- ensure_checkout_allowed(user, provider_product, attrs),
+         {:ok, purchase} <- create_purchase(user, provider_product, attrs) do
+      case stripe_adapter().create_checkout_session(purchase, provider_product, attrs) do
+        {:ok, session} ->
+          with {:ok, updated_purchase} <- mark_purchase_requires_action(purchase, session) do
+            {:ok,
+             %{
+               purchase: updated_purchase,
+               checkout_url: session["url"],
+               provider_session_id: session["id"]
+             }}
+          end
+
+        {:error, reason} ->
+          mark_purchase_failed(purchase, "stripe_checkout_session_failed", reason)
+          {:error, reason}
+      end
     else
       {:error, reason} -> {:error, reason}
     end
@@ -355,18 +363,25 @@ defmodule GameServer.Payments do
       |> Map.put_new("order_id", generate_steam_order_id())
 
     with {:ok, provider_product} <- resolve_provider_product("steam", attrs),
-         {:ok, purchase} <- create_purchase(user, provider_product, attrs),
-         {:ok, result} <-
-           provider_adapter("steam").init_transaction(purchase, provider_product, attrs),
-         {:ok, updated_purchase} <- mark_steam_purchase_requires_action(purchase, result) do
-      params = steam_response_params(result)
+         :ok <- ensure_checkout_allowed(user, provider_product, attrs),
+         {:ok, purchase} <- create_purchase(user, provider_product, attrs) do
+      case provider_adapter("steam").init_transaction(purchase, provider_product, attrs) do
+        {:ok, result} ->
+          with {:ok, updated_purchase} <- mark_steam_purchase_requires_action(purchase, result) do
+            params = steam_response_params(result)
 
-      {:ok,
-       %{
-         purchase: updated_purchase,
-         provider_transaction_id: params["transid"],
-         steam_url: params["steamurl"]
-       }}
+            {:ok,
+             %{
+               purchase: updated_purchase,
+               provider_transaction_id: params["transid"],
+               steam_url: params["steamurl"]
+             }}
+          end
+
+        {:error, reason} ->
+          mark_purchase_failed(purchase, "steam_checkout_session_failed", reason)
+          {:error, reason}
+      end
     else
       {:error, reason} -> {:error, reason}
     end
@@ -426,7 +441,7 @@ defmodule GameServer.Payments do
   end
 
   # ---------------------------------------------------------------------------
-  # Entitlements and wallet
+  # Entitlements
   # ---------------------------------------------------------------------------
 
   @spec list_user_entitlements(integer(), keyword()) :: [Entitlement.t()]
@@ -467,38 +482,10 @@ defmodule GameServer.Payments do
     |> Kernel.>(0)
   end
 
-  @spec wallet_balance(integer(), String.t()) :: integer()
-  def wallet_balance(user_id, currency_key)
-      when is_integer(user_id) and is_binary(currency_key) do
-    from(w in WalletLedgerEntry,
-      where: w.user_id == ^user_id and w.currency_key == ^currency_key,
-      select: coalesce(sum(w.delta), 0)
-    )
-    |> Repo.one()
-  end
-
-  @spec wallet_balances(integer()) :: map()
-  def wallet_balances(user_id) when is_integer(user_id) do
-    from(w in WalletLedgerEntry,
-      where: w.user_id == ^user_id,
-      group_by: w.currency_key,
-      select: {w.currency_key, coalesce(sum(w.delta), 0)}
-    )
-    |> Repo.all()
-    |> Map.new()
-  end
-
-  @spec list_wallet_ledger(integer(), keyword()) :: [WalletLedgerEntry.t()]
-  def list_wallet_ledger(user_id, opts \\ []) when is_integer(user_id) do
-    limit = opts |> Keyword.get(:limit, 100) |> min(250)
-
-    from(w in WalletLedgerEntry,
-      where: w.user_id == ^user_id,
-      order_by: [desc: w.inserted_at, desc: w.id],
-      limit: ^limit,
-      preload: [:purchase]
-    )
-    |> Repo.all()
+  @spec product_entitlement_key(Product.t()) :: String.t()
+  def product_entitlement_key(%Product{grant_config: config, sku: sku}) do
+    config = config || %{}
+    config["entitlement_key"] || config[:entitlement_key] || sku
   end
 
   @spec admin_stats() :: map()
@@ -510,26 +497,29 @@ defmodule GameServer.Payments do
       completed_purchases: count_purchases(status: "completed"),
       entitlements: count_entitlements(),
       active_entitlements: count_entitlements(status: "active"),
-      wallet_entries: count_wallet_ledger_entries(),
       provider_events: count_provider_events()
     }
   end
 
   @spec stripe_config_status() :: map()
   def stripe_config_status do
-    secret_key =
-      System.get_env("STRIPE_SECRET_KEY") ||
-        Application.get_env(:game_server_core, :stripe_secret_key)
-
-    webhook_secret =
-      System.get_env("STRIPE_WEBHOOK_SECRET") ||
-        Application.get_env(:game_server_core, :stripe_webhook_secret)
+    secret_key = ProviderConfig.stripe_secret_key()
+    webhook_secret = ProviderConfig.stripe_webhook_secret()
+    secret_key_source = ProviderConfig.stripe_secret_key_source()
+    webhook_secret_source = ProviderConfig.stripe_webhook_secret_source()
+    api_version_source = ProviderConfig.stripe_api_version_source()
 
     %{
       configured: present?(secret_key) and present?(webhook_secret),
       secret_key_configured: present?(secret_key),
       webhook_secret_configured: present?(webhook_secret),
       mode: stripe_key_mode(secret_key),
+      selected_secret_key: source_label(secret_key_source),
+      selected_webhook_secret: source_label(webhook_secret_source),
+      expected_secret_keys: ProviderConfig.stripe_candidate_labels(:secret_key),
+      expected_webhook_secrets: ProviderConfig.stripe_candidate_labels(:webhook_secret),
+      api_version: ProviderConfig.stripe_api_version(),
+      api_version_source: source_label(api_version_source) || "stripity_stripe default",
       masked_secret_key: mask_secret(secret_key),
       masked_webhook_secret: mask_secret(webhook_secret),
       environment: default_environment()
@@ -652,28 +642,6 @@ defmodule GameServer.Payments do
     |> Repo.aggregate(:count, :id)
   end
 
-  @spec list_admin_wallet_ledger(keyword()) :: [WalletLedgerEntry.t()]
-  def list_admin_wallet_ledger(opts \\ []) do
-    page = positive_page(opts)
-    page_size = page_size(opts)
-    offset = page_offset(page, page_size)
-
-    WalletLedgerEntry
-    |> admin_wallet_filters(opts)
-    |> order_by([w], desc: w.inserted_at, desc: w.id)
-    |> preload([:purchase, :user])
-    |> limit(^page_size)
-    |> offset(^offset)
-    |> Repo.all()
-  end
-
-  @spec count_wallet_ledger_entries(keyword()) :: non_neg_integer()
-  def count_wallet_ledger_entries(opts \\ []) do
-    WalletLedgerEntry
-    |> admin_wallet_filters(opts)
-    |> Repo.aggregate(:count, :id)
-  end
-
   @spec list_provider_events(keyword()) :: [ProviderEvent.t()]
   def list_provider_events(opts \\ []) do
     page = positive_page(opts)
@@ -788,6 +756,85 @@ defmodule GameServer.Payments do
 
   defp resolve_provider_product(_provider, _attrs), do: {:error, :missing_product_reference}
 
+  defp ensure_checkout_allowed(
+         %User{} = user,
+         %ProviderProduct{product: %Product{} = product},
+         attrs
+       ) do
+    with :ok <- ensure_single_ownership_quantity(product, attrs),
+         :ok <- ensure_single_ownership_available(user, product) do
+      :ok
+    end
+  end
+
+  defp ensure_checkout_allowed(_user, _provider_product, _attrs), do: :ok
+
+  defp ensure_single_ownership_quantity(%Product{kind: kind}, attrs)
+       when kind in ["entitlement", "subscription"] do
+    if parse_positive_int(attrs["quantity"], 1) == 1 do
+      :ok
+    else
+      {:error, :quantity_not_allowed}
+    end
+  end
+
+  defp ensure_single_ownership_quantity(_product, _attrs), do: :ok
+
+  defp ensure_single_ownership_available(%User{} = user, %Product{kind: kind} = product)
+       when kind in ["entitlement", "subscription"] do
+    key = product_entitlement_key(product)
+
+    cond do
+      has_entitlement?(user.id, key) ->
+        {:error, :already_owned}
+
+      purchase_in_progress?(user.id, product.id) ->
+        {:error, :purchase_already_in_progress}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp ensure_single_ownership_available(_user, _product), do: :ok
+
+  defp purchase_in_progress?(user_id, product_id) do
+    from(p in Purchase,
+      where:
+        p.user_id == ^user_id and p.product_id == ^product_id and
+          p.status == "requires_action",
+      select: count(p.id)
+    )
+    |> Repo.one()
+    |> Kernel.>(0)
+  end
+
+  defp mark_purchase_failed(%Purchase{} = purchase, reason, provider_reason) do
+    payload = %{
+      "failure_reason" => reason,
+      "provider_reason" => inspect(provider_reason) |> String.slice(0, 1_000)
+    }
+
+    result =
+      purchase
+      |> Purchase.changeset(%{
+        status: "failed",
+        raw_provider_payload: merge_payload(purchase.raw_provider_payload, payload)
+      })
+      |> Repo.update()
+
+    Logger.warning(
+      "Payment checkout failed",
+      purchase_id: purchase.id,
+      order_id: purchase.order_id,
+      provider: purchase.provider,
+      reason: reason,
+      provider_reason: inspect(provider_reason)
+    )
+
+    result
+  end
+
   defp mark_purchase_requires_action(%Purchase{} = purchase, session) when is_map(session) do
     metadata =
       purchase.metadata
@@ -876,33 +923,10 @@ defmodule GameServer.Payments do
     |> Repo.update()
   end
 
-  defp grant_purchase(%Purchase{product: %Product{kind: "currency"} = product} = purchase) do
-    config = product.grant_config || %{}
-    amount = parse_positive_int(config["amount"] || config[:amount], 0)
-    currency_key = config["currency_key"] || config[:currency_key] || product.sku
-    delta = amount * purchase.quantity
-
-    if delta <= 0 do
-      {:error, :invalid_currency_grant}
-    else
-      attrs = %{
-        user_id: purchase.user_id,
-        purchase_id: purchase.id,
-        currency_key: currency_key,
-        delta: delta,
-        reason: "purchase",
-        metadata: %{"product_sku" => product.sku, "provider" => purchase.provider}
-      }
-
-      case %WalletLedgerEntry{} |> WalletLedgerEntry.changeset(attrs) |> Repo.insert() do
-        {:ok, _entry} -> :ok
-        {:error, changeset} -> {:error, changeset}
-      end
-    end
-  end
+  defp grant_purchase(%Purchase{product: %Product{kind: "consumable"}}), do: :ok
 
   defp grant_purchase(%Purchase{product: %Product{} = product} = purchase) do
-    key = entitlement_key(product)
+    key = product_entitlement_key(product)
     expires_at = purchase.expires_at || entitlement_expiry(product)
     now = DateTime.utc_now(:second)
 
@@ -1442,12 +1466,6 @@ defmodule GameServer.Payments do
     |> maybe_where_like(:key, Keyword.get(opts, :key))
   end
 
-  defp admin_wallet_filters(query, opts) do
-    query
-    |> maybe_where_int(:user_id, Keyword.get(opts, :user_id))
-    |> maybe_where_string(:currency_key, Keyword.get(opts, :currency_key))
-  end
-
   defp provider_event_filters(query, opts) do
     query
     |> maybe_where_string(:provider, Keyword.get(opts, :provider))
@@ -1497,11 +1515,6 @@ defmodule GameServer.Payments do
 
   defp mask_secret(_value), do: "<unset>"
 
-  defp entitlement_key(%Product{grant_config: config, sku: sku}) do
-    config = config || %{}
-    config["entitlement_key"] || config[:entitlement_key] || sku
-  end
-
   defp entitlement_expiry(%Product{kind: "subscription", grant_config: config}) do
     duration = parse_positive_int((config || %{})["duration_seconds"], 0)
 
@@ -1531,9 +1544,11 @@ defmodule GameServer.Payments do
   end
 
   defp default_environment do
-    System.get_env("PAYMENTS_ENVIRONMENT") ||
-      Application.get_env(:game_server_core, :payments_environment, "production")
+    ProviderConfig.environment()
   end
+
+  defp source_label({label, _value}), do: label
+  defp source_label(nil), do: nil
 
   defp merge_payload(existing, incoming) when is_map(existing) and is_map(incoming) do
     Map.merge(existing || %{}, incoming || %{})

@@ -148,6 +148,11 @@
           "text_align": "left",
           "buttons": [
             {
+              "label": "Open Store",
+              "href": "/store",
+              "icon": "hero-shopping-bag-solid"
+            },
+            {
               "label": "Payment Docs",
               "href": "/docs/setup#payments",
               "icon": "hero-book-open-solid"
@@ -305,6 +310,10 @@
           {
             "label": "API Docs",
             "href": "/api/docs"
+          },
+          {
+            "label": "Store",
+            "href": "/store"
           }
         ]
       },

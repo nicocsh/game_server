@@ -144,8 +144,8 @@ defmodule GameServerWeb.AdminPagesRenderTest do
       GameServer.Payments.create_product(%{
         "sku" => "seeded_pay_#{System.unique_integer([:positive])}",
         "title" => "Seeded Payment Product",
-        "kind" => "currency",
-        "grant_config" => %{"currency_key" => "coins", "amount" => 10}
+        "kind" => "consumable",
+        "grant_config" => %{"hook_payload" => %{"coins" => 10}}
       })
 
     {:ok, provider_product} =

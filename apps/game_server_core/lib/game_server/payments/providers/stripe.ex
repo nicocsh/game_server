@@ -3,69 +3,108 @@ defmodule GameServer.Payments.Providers.Stripe do
   Minimal Stripe Checkout and webhook adapter.
   """
 
-  @checkout_url "https://api.stripe.com/v1/checkout/sessions"
-  @timestamp_tolerance_seconds 300
+  alias GameServer.Payments.ProviderConfig
+
+  @webhook_tolerance_seconds 300
 
   def create_checkout_session(purchase, provider_product, attrs) do
     with {:ok, secret_key} <- secret_key(),
          {:ok, success_url} <- required_attr(attrs, "success_url"),
          {:ok, cancel_url} <- required_attr(attrs, "cancel_url") do
-      body = [
-        {"mode", stripe_mode(provider_product.product.kind)},
-        {"line_items[0][price]", provider_product.external_id},
-        {"line_items[0][quantity]", to_string(purchase.quantity)},
-        {"success_url", success_url},
-        {"cancel_url", cancel_url},
-        {"metadata[purchase_id]", to_string(purchase.id)},
-        {"metadata[order_id]", purchase.order_id},
-        {"metadata[user_id]", to_string(purchase.user_id)},
-        {"metadata[product_sku]", provider_product.product.sku},
-        {"payment_intent_data[metadata][purchase_id]", to_string(purchase.id)},
-        {"payment_intent_data[metadata][order_id]", purchase.order_id},
-        {"payment_intent_data[metadata][user_id]", to_string(purchase.user_id)},
-        {"payment_intent_data[metadata][product_sku]", provider_product.product.sku}
-      ]
+      metadata = checkout_metadata(purchase, provider_product)
+      mode = stripe_mode(provider_product.product.kind)
 
-      case Req.post(@checkout_url,
-             auth: {:bearer, secret_key},
-             form: body,
-             headers: [{"content-type", "application/x-www-form-urlencoded"}]
+      params =
+        checkout_params(provider_product, purchase, success_url, cancel_url, mode, metadata)
+
+      case create_checkout_session_with_sdk(
+             params,
+             stripe_request_opts(secret_key, purchase)
            ) do
-        {:ok, %{status: status, body: body}} when status in 200..299 and is_map(body) ->
-          {:ok, body}
-
-        {:ok, %{status: status, body: body}} ->
-          {:error, {:stripe_error, status, body}}
+        {:ok, session} ->
+          {:ok, normalize_stripe_payload(session)}
 
         {:error, reason} ->
-          {:error, reason}
+          {:error, {:stripe_error, normalize_stripe_payload(reason)}}
       end
     end
   end
 
-  def verify_webhook(raw_body, signature_header) when is_binary(raw_body) do
-    with {:ok, secret} <- webhook_secret(),
-         {:ok, timestamp, signatures} <- parse_signature_header(signature_header),
-         :ok <- validate_timestamp(timestamp),
-         :ok <- validate_signature(raw_body, secret, timestamp, signatures) do
-      Jason.decode(raw_body)
+  def verify_webhook(_raw_body, nil), do: {:error, :missing_stripe_signature}
+
+  def verify_webhook(raw_body, signature_header)
+      when is_binary(raw_body) and is_binary(signature_header) do
+    with {:ok, secret} <- webhook_secret() do
+      case construct_webhook_event_with_sdk(
+             raw_body,
+             signature_header,
+             secret,
+             @webhook_tolerance_seconds
+           ) do
+        {:ok, event} ->
+          {:ok, normalize_stripe_payload(event)}
+
+        {:error, reason} ->
+          {:error, stripe_webhook_error(reason)}
+      end
     end
   end
+
+  def verify_webhook(_raw_body, _signature_header), do: {:error, :invalid_stripe_payload}
 
   defp stripe_mode("subscription"), do: "subscription"
   defp stripe_mode(_kind), do: "payment"
 
+  defp checkout_metadata(purchase, provider_product) do
+    %{
+      "purchase_id" => to_string(purchase.id),
+      "order_id" => purchase.order_id,
+      "user_id" => to_string(purchase.user_id),
+      "product_sku" => provider_product.product.sku
+    }
+  end
+
+  defp checkout_params(provider_product, purchase, success_url, cancel_url, mode, metadata) do
+    %{
+      mode: mode,
+      line_items: [
+        %{
+          price: provider_product.external_id,
+          quantity: purchase.quantity
+        }
+      ],
+      success_url: success_url,
+      cancel_url: cancel_url,
+      metadata: metadata
+    }
+    |> put_checkout_payment_metadata(mode, metadata)
+  end
+
+  defp put_checkout_payment_metadata(params, "subscription", metadata) do
+    Map.put(params, :subscription_data, %{metadata: metadata})
+  end
+
+  defp put_checkout_payment_metadata(params, _mode, metadata) do
+    Map.put(params, :payment_intent_data, %{metadata: metadata})
+  end
+
+  defp stripe_request_opts(secret_key, purchase) do
+    [
+      api_key: secret_key,
+      api_version: ProviderConfig.stripe_api_version(),
+      idempotency_key: purchase.order_id
+    ]
+  end
+
   defp secret_key do
-    case System.get_env("STRIPE_SECRET_KEY") ||
-           Application.get_env(:game_server_core, :stripe_secret_key) do
+    case ProviderConfig.stripe_secret_key() do
       key when is_binary(key) and key != "" -> {:ok, key}
       _ -> {:error, :stripe_not_configured}
     end
   end
 
   defp webhook_secret do
-    case System.get_env("STRIPE_WEBHOOK_SECRET") ||
-           Application.get_env(:game_server_core, :stripe_webhook_secret) do
+    case ProviderConfig.stripe_webhook_secret() do
       secret when is_binary(secret) and secret != "" -> {:ok, secret}
       _ -> {:error, :stripe_webhook_not_configured}
     end
@@ -78,60 +117,52 @@ defmodule GameServer.Payments.Providers.Stripe do
     end
   end
 
-  defp parse_signature_header(nil), do: {:error, :missing_stripe_signature}
+  defp stripe_client do
+    Application.get_env(:game_server_core, :stripe_client, __MODULE__.Client)
+  end
 
-  defp parse_signature_header(header) when is_binary(header) do
-    parts =
-      header
-      |> String.split(",", trim: true)
-      |> Enum.map(fn part ->
-        case String.split(part, "=", parts: 2) do
-          [key, value] -> {key, value}
-          _ -> nil
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
+  defp create_checkout_session_with_sdk(params, opts) do
+    stripe_client().create_checkout_session(params, opts)
+  rescue
+    exception -> {:error, exception}
+  end
 
-    with {_, timestamp} <- Enum.find(parts, fn {key, _value} -> key == "t" end),
-         {int, ""} <- Integer.parse(timestamp) do
-      signatures =
-        parts
-        |> Enum.filter(fn {key, _value} -> key == "v1" end)
-        |> Enum.map(fn {_key, value} -> value end)
+  defp construct_webhook_event_with_sdk(raw_body, signature_header, secret, tolerance_seconds) do
+    stripe_client().construct_webhook_event(raw_body, signature_header, secret, tolerance_seconds)
+  rescue
+    exception -> {:error, {:stripe_webhook_error, Exception.message(exception)}}
+  end
 
-      {:ok, int, signatures}
-    else
-      _ -> {:error, :invalid_stripe_signature}
+  defp stripe_webhook_error({:stripe_webhook_error, _reason} = error), do: error
+  defp stripe_webhook_error(reason), do: {:invalid_stripe_signature, reason}
+
+  defp normalize_stripe_payload(%_module{} = struct) do
+    struct
+    |> Map.from_struct()
+    |> normalize_stripe_payload()
+  end
+
+  defp normalize_stripe_payload(map) when is_map(map) do
+    Map.new(map, fn {key, value} ->
+      {to_string(key), normalize_stripe_payload(value)}
+    end)
+  end
+
+  defp normalize_stripe_payload(list) when is_list(list) do
+    Enum.map(list, &normalize_stripe_payload/1)
+  end
+
+  defp normalize_stripe_payload(value), do: value
+
+  defmodule Client do
+    @moduledoc false
+
+    def create_checkout_session(params, opts) do
+      Stripe.Checkout.Session.create(params, opts)
+    end
+
+    def construct_webhook_event(raw_body, signature_header, secret, tolerance_seconds) do
+      Stripe.Webhook.construct_event(raw_body, signature_header, secret, tolerance_seconds)
     end
   end
-
-  defp validate_timestamp(timestamp) when is_integer(timestamp) do
-    now = DateTime.utc_now() |> DateTime.to_unix()
-
-    if abs(now - timestamp) <= @timestamp_tolerance_seconds do
-      :ok
-    else
-      {:error, :stale_stripe_signature}
-    end
-  end
-
-  defp validate_signature(raw_body, secret, timestamp, signatures) do
-    signed_payload = "#{timestamp}.#{raw_body}"
-
-    expected =
-      :crypto.mac(:hmac, :sha256, secret, signed_payload)
-      |> Base.encode16(case: :lower)
-
-    if Enum.any?(signatures, &secure_compare(&1, expected)) do
-      :ok
-    else
-      {:error, :invalid_stripe_signature}
-    end
-  end
-
-  defp secure_compare(left, right) when byte_size(left) == byte_size(right) do
-    Plug.Crypto.secure_compare(left, right)
-  end
-
-  defp secure_compare(_left, _right), do: false
 end

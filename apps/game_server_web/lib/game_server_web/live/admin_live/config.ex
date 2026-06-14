@@ -9,6 +9,7 @@ defmodule GameServerWeb.AdminLive.Config do
   alias GameServer.Hooks.PluginBuilder
   alias GameServer.Hooks.PluginManager
   alias GameServer.Payments
+  alias GameServer.Payments.ProviderConfig
   alias GameServer.Repo.AdvisoryLock
   alias GameServer.Schedule
   alias GameServer.Theme.JSONConfig
@@ -2521,9 +2522,21 @@ defmodule GameServerWeb.AdminLive.Config do
         configured: stripe.configured,
         details: [
           "Detected mode: #{stripe.mode}",
-          env_line("STRIPE_SECRET_KEY", stripe_secret_key(), secret: true),
-          env_line("STRIPE_WEBHOOK_SECRET", stripe_webhook_secret(), secret: true),
-          env_line("PAYMENTS_ENVIRONMENT", payments_environment())
+          env_line("PAYMENTS_ENVIRONMENT", payments_environment()),
+          "Secret key source: #{stripe.selected_secret_key || Enum.join(stripe.expected_secret_keys, " or ")}",
+          env_line(
+            stripe.selected_secret_key || "STRIPE_*_SECRET_KEY",
+            ProviderConfig.stripe_secret_key(),
+            secret: true
+          ),
+          "Webhook secret source: #{stripe.selected_webhook_secret || Enum.join(stripe.expected_webhook_secrets, " or ")}",
+          env_line(
+            stripe.selected_webhook_secret || "STRIPE_*_WEBHOOK_SECRET",
+            ProviderConfig.stripe_webhook_secret(),
+            secret: true
+          ),
+          "API version source: #{stripe.api_version_source}",
+          env_line("STRIPE_API_VERSION", stripe.api_version)
         ]
       },
       %{
@@ -2558,7 +2571,7 @@ defmodule GameServerWeb.AdminLive.Config do
           env_line("APPLE_KEY_ID", System.get_env("APPLE_KEY_ID")),
           env_line("APPLE_PRIVATE_KEY", System.get_env("APPLE_PRIVATE_KEY"), secret: true),
           env_line("APPLE_PRIVATE_KEY_PATH", System.get_env("APPLE_PRIVATE_KEY_PATH")),
-          env_line("APPLE_ENVIRONMENT", System.get_env("APPLE_ENVIRONMENT"))
+          env_line("PAYMENTS_ENVIRONMENT", payments_environment())
         ]
       },
       %{
@@ -2568,26 +2581,13 @@ defmodule GameServerWeb.AdminLive.Config do
           env_line("STEAM_WEB_API_KEY", System.get_env("STEAM_WEB_API_KEY"), secret: true),
           env_line("STEAM_API_KEY fallback", System.get_env("STEAM_API_KEY"), secret: true),
           env_line("STEAM_APP_ID", System.get_env("STEAM_APP_ID")),
-          env_line("STEAM_PAYMENTS_ENVIRONMENT", System.get_env("STEAM_PAYMENTS_ENVIRONMENT"))
+          env_line("PAYMENTS_ENVIRONMENT", payments_environment())
         ]
       }
     ]
   end
 
-  defp stripe_secret_key do
-    System.get_env("STRIPE_SECRET_KEY") ||
-      Application.get_env(:game_server_core, :stripe_secret_key)
-  end
-
-  defp stripe_webhook_secret do
-    System.get_env("STRIPE_WEBHOOK_SECRET") ||
-      Application.get_env(:game_server_core, :stripe_webhook_secret)
-  end
-
-  defp payments_environment do
-    System.get_env("PAYMENTS_ENVIRONMENT") ||
-      Application.get_env(:game_server_core, :payments_environment, "production")
-  end
+  defp payments_environment, do: ProviderConfig.environment()
 
   defp env_line(key, value, opts \\ []) do
     display =

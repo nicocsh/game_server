@@ -6,6 +6,8 @@ defmodule GameServer.Payments.Providers.Apple do
   transaction id that can be fetched from App Store Server API.
   """
 
+  alias GameServer.Payments.ProviderConfig
+
   @production_base_url "https://api.storekit.itunes.apple.com/inApps/v1"
   @sandbox_base_url "https://api.storekit-sandbox.itunes.apple.com/inApps/v1"
 
@@ -217,15 +219,12 @@ defmodule GameServer.Payments.Providers.Apple do
     config_value("APPLE_APP_STORE_SERVER_BASE_URL", :apple_app_store_server_base_url) ||
       case apple_environment() do
         "sandbox" -> @sandbox_base_url
-        "test" -> @sandbox_base_url
         _ -> @production_base_url
       end
   end
 
   defp apple_environment do
-    config_value("APPLE_ENVIRONMENT", :apple_environment) ||
-      System.get_env("PAYMENTS_ENVIRONMENT") ||
-      Application.get_env(:game_server_core, :payments_environment, "production")
+    ProviderConfig.environment()
   end
 
   defp bundle_id_value, do: config_value("APPLE_BUNDLE_ID", :apple_bundle_id)
@@ -249,8 +248,7 @@ defmodule GameServer.Payments.Providers.Apple do
   end
 
   defp default_environment do
-    System.get_env("PAYMENTS_ENVIRONMENT") ||
-      Application.get_env(:game_server_core, :payments_environment, "production")
+    ProviderConfig.environment()
   end
 
   defp normalize_private_key(value), do: String.replace(value, "\\n", "\n")

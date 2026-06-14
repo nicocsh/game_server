@@ -44,9 +44,13 @@ defmodule GameServerWeb.Router.BrowserRoutes do
           ] do
           live "/users/settings", UserLive.Settings, :edit
           live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
+          live "/store", StoreLive.Index, :index
+          live "/store/success", StoreLive.Index, :success
+          live "/store/cancel", StoreLive.Index, :cancel
         end
 
         post "/users/update-password", UserSessionController, :update_password
+        get "/payments/downloads/:id", PaymentDownloadController, :show
       end
 
       scope "/" do

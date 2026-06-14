@@ -52,21 +52,6 @@ defmodule GameServerWeb.Api.V1.PaymentController do
     json(conn, %{data: data})
   end
 
-  operation(:wallet,
-    operation_id: "payments_wallet",
-    summary: "Return current user's wallet balances",
-    security: [%{"authorization" => []}],
-    responses: [
-      ok: {"Wallet", "application/json", %Schema{type: :object}},
-      unauthorized: {"Unauthorized", "application/json", @error_schema}
-    ]
-  )
-
-  def wallet(conn, _params) do
-    user = conn.assigns.current_scope.user
-    json(conn, %{data: Payments.wallet_balances(user.id)})
-  end
-
   operation(:stripe_checkout,
     operation_id: "payments_stripe_checkout",
     summary: "Create a Stripe Checkout Session",

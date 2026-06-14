@@ -222,7 +222,7 @@ defmodule GameServerWeb.ApiSpec do
         },
         %Tag{
           name: "Payments",
-          description: "Store catalog, checkout, receipts, wallet, and entitlements"
+          description: "Store catalog, checkout, receipts, purchases, and entitlements"
         },
         %Tag{name: "KV", description: "Per-user key-value storage"},
         %Tag{name: "Hooks", description: "Server scripting hooks"},
