@@ -136,6 +136,15 @@ defmodule GameServerWeb.TestSupport.NoopHooks do
       @impl true
       def after_achievement_unlocked(_user_id, _achievement), do: :ok
 
+      @impl true
+      def after_purchase_fulfilled(_purchase), do: :ok
+
+      @impl true
+      def after_purchase_revoked(_purchase), do: :ok
+
+      @impl true
+      def after_entitlement_changed(_entitlement), do: :ok
+
       defoverridable after_startup: 0,
                      before_stop: 0,
                      after_user_register: 1,
@@ -178,7 +187,10 @@ defmodule GameServerWeb.TestSupport.NoopHooks do
                      before_chat_message: 2,
                      after_chat_message: 1,
                      before_kv_get: 2,
-                     after_achievement_unlocked: 2
+                     after_achievement_unlocked: 2,
+                     after_purchase_fulfilled: 1,
+                     after_purchase_revoked: 1,
+                     after_entitlement_changed: 1
     end
   end
 end

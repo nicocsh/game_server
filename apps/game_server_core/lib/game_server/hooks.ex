@@ -19,6 +19,8 @@ defmodule GameServer.Hooks do
   alias GameServer.Hooks.Default, as: Default
   alias GameServer.Hooks.PluginManager
   alias GameServer.Lobbies.Lobby
+  alias GameServer.Payments.Entitlement
+  alias GameServer.Payments.Purchase
   alias GameServer.Parties.Party
   require Logger
 
@@ -112,6 +114,14 @@ defmodule GameServer.Hooks do
 
   # Achievement lifecycle hooks
   @callback after_achievement_unlocked(integer(), Achievement.t()) :: any()
+
+  # Payment lifecycle hooks
+  @callback after_purchase_fulfilled(Purchase.t()) :: any()
+  @callback after_purchase_revoked(Purchase.t()) :: any()
+  @callback after_entitlement_changed(Entitlement.t()) :: any()
+  @optional_callbacks after_purchase_fulfilled: 1,
+                      after_purchase_revoked: 1,
+                      after_entitlement_changed: 1
 
   @callback before_chat_message(User.t(), map()) :: hook_result(map())
   @callback after_chat_message(Message.t()) :: any()
@@ -353,6 +363,9 @@ defmodule GameServer.Hooks do
       :after_user_kicked,
       :after_lobby_host_change,
       :after_achievement_unlocked,
+      :after_purchase_fulfilled,
+      :after_purchase_revoked,
+      :after_entitlement_changed,
       :on_custom_hook,
       :before_kv_get
     ])
@@ -1150,6 +1163,15 @@ defmodule GameServer.Hooks.Default do
 
   @impl true
   def after_achievement_unlocked(_user_id, _achievement), do: :ok
+
+  @impl true
+  def after_purchase_fulfilled(_purchase), do: :ok
+
+  @impl true
+  def after_purchase_revoked(_purchase), do: :ok
+
+  @impl true
+  def after_entitlement_changed(_entitlement), do: :ok
 
   @impl true
   def on_custom_hook(_hook, _args), do: {:error, :not_implemented}

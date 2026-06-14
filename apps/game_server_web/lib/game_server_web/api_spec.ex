@@ -220,6 +220,10 @@ defmodule GameServerWeb.ApiSpec do
           name: "Achievements",
           description: "Player achievements, progress tracking, and unlocks"
         },
+        %Tag{
+          name: "Payments",
+          description: "Store catalog, checkout, receipts, wallet, and entitlements"
+        },
         %Tag{name: "KV", description: "Per-user key-value storage"},
         %Tag{name: "Hooks", description: "Server scripting hooks"},
         %Tag{name: "Health", description: "Server health check"},

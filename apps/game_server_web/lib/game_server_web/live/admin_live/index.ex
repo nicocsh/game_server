@@ -11,6 +11,7 @@ defmodule GameServerWeb.AdminLive.Index do
   alias GameServer.Lobbies.Lobby
   alias GameServer.Notifications
   alias GameServer.Parties
+  alias GameServer.Payments
   alias GameServer.Repo
   alias GameServerWeb.ConnectionTracker
   alias GameServerWeb.Gettext.Stats, as: TranslationStats
@@ -61,6 +62,9 @@ defmodule GameServerWeb.AdminLive.Index do
           </.link>
           <.link navigate={~p"/admin/achievements"} class="btn btn-outline">
             Achievements ({@achievements_count})
+          </.link>
+          <.link navigate={~p"/admin/payments"} class="btn btn-outline">
+            Payments ({@payments_stats.purchases})
           </.link>
           <.link navigate={~p"/admin/connections"} class="btn btn-outline">
             Connections ({@conn_stats.total_connections})
@@ -440,6 +444,24 @@ defmodule GameServerWeb.AdminLive.Index do
                   </div>
                 </div>
               </div>
+
+              <%!-- 12. Payments --%>
+              <div class="card bg-base-100 p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="text-sm font-semibold">Payments</div>
+                  <.link navigate={~p"/admin/payments"} class="link link-primary text-xs">
+                    View →
+                  </.link>
+                </div>
+                <div class="text-2xl font-bold">{@payments_stats.purchases}</div>
+                <div class="text-xs text-base-content/60 mt-2 space-y-1">
+                  <div>Completed: {@payments_stats.completed_purchases}</div>
+                  <div>Products: {@payments_stats.products}</div>
+                  <div>Provider SKUs: {@payments_stats.provider_products}</div>
+                  <div>Active entitlements: {@payments_stats.active_entitlements}</div>
+                  <div>Wallet entries: {@payments_stats.wallet_entries}</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -484,6 +506,7 @@ defmodule GameServerWeb.AdminLive.Index do
       achievements_count: Task.async(fn -> Achievements.count_all_achievements() end),
       achievements_unlocks: Task.async(fn -> Achievements.count_all_unlocks() end),
       achievement_stats: Task.async(fn -> Achievements.dashboard_stats() end),
+      payments_stats: Task.async(fn -> Payments.admin_stats() end),
       translation_stats: Task.async(fn -> TranslationStats.all_completeness() end),
       content_i18n_stats: Task.async(fn -> compute_content_i18n_stats() end),
       users_registered_1d: Task.async(fn -> Accounts.count_users_registered_since(1) end),
@@ -549,6 +572,7 @@ defmodule GameServerWeb.AdminLive.Index do
        achievements_count: r.achievements_count,
        achievements_unlocks: r.achievements_unlocks,
        achievement_stats: r.achievement_stats,
+       payments_stats: r.payments_stats,
        conn_stats: conn_stats,
        sys_stats: sys_stats,
        rate_stats: rate_stats,

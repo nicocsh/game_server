@@ -722,9 +722,12 @@ defmodule GameServerWeb.HostLayoutNavigation do
   end
 
   defp required_auth(entry, default_auth) do
+    auth = Map.get(entry, "auth") || Map.get(entry, :auth)
+
     cond do
-      Map.get(entry, "admin_only") == true -> "admin"
-      is_binary(Map.get(entry, "auth")) -> Map.get(entry, "auth")
+      Map.get(entry, "admin_only") == true or Map.get(entry, :admin_only) == true -> "admin"
+      is_binary(auth) -> auth
+      is_atom(auth) and not is_nil(auth) -> Atom.to_string(auth)
       true -> default_auth
     end
   end

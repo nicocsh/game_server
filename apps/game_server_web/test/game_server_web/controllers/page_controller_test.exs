@@ -128,7 +128,8 @@ defmodule GameServerWeb.PageControllerTest do
         ],
         "account_links" => [
           %{"label" => "Billing", "href" => "/billing"},
-          %{"label" => "Admin Console", "href" => "/admin", "admin_only" => true}
+          %{"label" => "Admin Console", "href" => "/admin", "admin_only" => true},
+          %{"label" => "Admin Reports", "href" => "/admin/reports", "auth" => "admin"}
         ]
       }
     }
@@ -253,6 +254,7 @@ defmodule GameServerWeb.PageControllerTest do
 
     assert body =~ "href=\"/billing\""
     refute body =~ "href=\"/admin\""
+    refute body =~ "href=\"/admin/reports\""
   end
 
   test "home hides auth-only dropdown items from guests", %{conn: conn} do
@@ -295,6 +297,7 @@ defmodule GameServerWeb.PageControllerTest do
 
     assert body =~ "href=\"/billing\""
     assert body =~ "href=\"/admin\""
+    assert body =~ "href=\"/admin/reports\""
   end
 
   test "privacy page present", %{conn: conn} do

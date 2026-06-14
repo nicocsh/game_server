@@ -165,6 +165,10 @@ defmodule GameServerWeb.Router.Shared do
         get "/leaderboards/:id/records", LeaderboardController, :records
         get "/leaderboards/:id/records/around/:user_id", LeaderboardController, :around
         get "/groups", GroupController, :index
+        get "/payments/catalog", PaymentController, :catalog
+        post "/payments/webhooks/stripe", PaymentWebhookController, :stripe
+        post "/payments/webhooks/google", PaymentWebhookController, :google
+        post "/payments/webhooks/apple", PaymentWebhookController, :apple
       end
     end
   end
@@ -235,6 +239,12 @@ defmodule GameServerWeb.Router.Shared do
         post "/lobbies/kick", LobbyController, :kick
         patch "/me/password", MeController, :update_password
         patch "/me/display_name", MeController, :update_display_name
+        get "/payments/entitlements", PaymentController, :entitlements
+        get "/payments/wallet", PaymentController, :wallet
+        post "/payments/checkout/stripe", PaymentController, :stripe_checkout
+        post "/payments/checkout/steam", PaymentController, :steam_checkout
+        post "/payments/steam/finalize", PaymentController, :steam_finalize
+        post "/payments/validate/:provider", PaymentController, :validate
         delete "/me/providers/:provider", ProviderController, :unlink
         post "/me/device", ProviderController, :link_device
         delete "/me/device", ProviderController, :unlink_device
@@ -459,6 +469,7 @@ defmodule GameServerWeb.Router.Shared do
           live "/admin/parties", AdminLive.Parties, :index
           live "/admin/chat", AdminLive.Chat, :index
           live "/admin/achievements", AdminLive.Achievements, :index
+          live "/admin/payments", AdminLive.Payments, :index
           live "/admin/translations", AdminLive.Translations, :index
           live "/admin/connections", AdminLive.Connections, :index
           live "/admin/rate-limiting", AdminLive.RateLimiting, :index

@@ -27,6 +27,7 @@ defmodule GameServerWeb.AdminPagesRenderTest do
     {"/admin/parties", "Parties"},
     {"/admin/chat", "Chat"},
     {"/admin/achievements", "Achievements"},
+    {"/admin/payments", "Payments"},
     {"/admin/translations", "Translation"}
   ]
 
@@ -87,6 +88,7 @@ defmodule GameServerWeb.AdminPagesRenderTest do
     {"/admin/groups", "Groups"},
     {"/admin/leaderboards", "Leaderboards"},
     {"/admin/achievements", "Achievements"},
+    {"/admin/payments", "Payments"},
     {"/admin/kv", "KV"},
     {"/admin/notifications", "Notifications"},
     {"/admin/users", "Users"}
@@ -136,6 +138,27 @@ defmodule GameServerWeb.AdminPagesRenderTest do
 
     # KV entry
     GameServer.KV.put("seeded:key", %{v: 1}, %{"meta" => "data"})
+
+    # Payment data
+    {:ok, product} =
+      GameServer.Payments.create_product(%{
+        "sku" => "seeded_pay_#{System.unique_integer([:positive])}",
+        "title" => "Seeded Payment Product",
+        "kind" => "currency",
+        "grant_config" => %{"currency_key" => "coins", "amount" => 10}
+      })
+
+    {:ok, provider_product} =
+      GameServer.Payments.create_provider_product(%{
+        "product_id" => product.id,
+        "provider" => "stripe",
+        "external_id" => "price_seeded_#{System.unique_integer([:positive])}",
+        "currency" => "USD",
+        "unit_amount" => 100
+      })
+
+    {:ok, purchase} = GameServer.Payments.create_purchase(admin, provider_product)
+    GameServer.Payments.fulfill_purchase(purchase)
 
     # Notification
     GameServer.Notifications.admin_create_notification(admin.id, other.id, %{

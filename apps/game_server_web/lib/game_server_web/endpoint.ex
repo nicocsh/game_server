@@ -53,6 +53,7 @@ defmodule GameServerWeb.Endpoint do
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
     length: 1_048_576,
+    body_reader: {GameServerWeb.Plugs.RawBodyReader, :read_body, []},
     json_decoder: Phoenix.json_library()
 
   plug Plug.MethodOverride
