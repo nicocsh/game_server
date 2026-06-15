@@ -230,14 +230,12 @@ defmodule GameServer.Hooks.PluginManager do
 
   defp rpc_result_status({:ok, _result}), do: "ok"
   defp rpc_result_status({:error, reason}), do: "error:#{inspect(reason)}"
-  defp rpc_result_status(_result), do: "unknown"
 
   defp user_id(%{id: id}) when is_integer(id), do: id
   defp user_id(_user), do: nil
 
   defp format_context_value(value) when is_binary(value), do: inspect(value)
   defp format_context_value(value) when is_integer(value), do: Integer.to_string(value)
-  defp format_context_value(nil), do: "nil"
   defp format_context_value(value), do: inspect(value)
 
   defp duration_ms_since(start_time) do
@@ -376,9 +374,6 @@ defmodule GameServer.Hooks.PluginManager do
     else
       {:error, reason} ->
         %Plugin{plugin | status: {:error, reason}}
-
-      other ->
-        %Plugin{plugin | status: {:error, other}}
     end
   end
 

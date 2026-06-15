@@ -17,7 +17,7 @@ defmodule GameServerWeb.Api.V1.LobbyControllerTest do
     {:ok, hostless_visible} =
       Lobbies.create_lobby(%{title: "visible-hostless-room", hostless: true})
 
-    {:ok, _hidden} =
+    {:ok, hidden} =
       Lobbies.create_lobby(%{title: "hidden-room", hostless: true, is_hidden: true})
 
     conn = get(conn, "/api/v1/lobbies")
@@ -29,7 +29,7 @@ defmodule GameServerWeb.Api.V1.LobbyControllerTest do
     assert Enum.all?(lobbies, fn l -> Map.has_key?(l, "host_name") end)
     # ensure serializer includes is_passworded flag
     assert Enum.any?(lobbies, fn l -> l["id"] == lobby1.id and l["is_passworded"] == false end)
-    refute Enum.any?(lobbies, fn l -> l["id"] == _hidden.id end)
+    refute Enum.any?(lobbies, fn l -> l["id"] == hidden.id end)
     # meta should include totals
     assert resp["meta"]["total_count"] == 2
     assert resp["meta"]["total_pages"] == 1

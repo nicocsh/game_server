@@ -701,7 +701,7 @@ defmodule GameServerWeb.Api.V1.LobbyController do
           %{}
       end
 
-    case Lobbies.quick_join(user, title, max_users, metadata || %{}) do
+    case Lobbies.quick_join(user, title, max_users, metadata) do
       {:ok, lobby} ->
         json(conn, serialize_lobby(lobby))
 

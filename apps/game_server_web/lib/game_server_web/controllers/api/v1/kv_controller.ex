@@ -94,9 +94,6 @@ defmodule GameServerWeb.Api.V1.KvController do
 
       {:error, _reason} ->
         forbidden(conn)
-
-      _ ->
-        forbidden(conn)
     end
   end
 

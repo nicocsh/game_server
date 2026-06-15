@@ -108,7 +108,6 @@ defmodule GameServerWeb.PayloadDelta do
 
   defp drop_identity(payload), do: Map.drop(payload, @identity_keys)
 
-  defp normalize_root(nil), do: %{}
   defp normalize_root(payload) when is_plain_map(payload), do: normalize_payload(payload)
   defp normalize_root(_payload), do: %{}
 

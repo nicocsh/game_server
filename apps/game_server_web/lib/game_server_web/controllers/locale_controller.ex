@@ -52,8 +52,6 @@ defmodule GameServerWeb.LocaleController do
     end
   end
 
-  defp strip_locale_prefix(_), do: "/"
-
   defp build_destination(locale, path, query) when is_binary(locale) and is_binary(path) do
     base_path =
       if locale == @default_locale do
@@ -94,7 +92,7 @@ defmodule GameServerWeb.LocaleController do
     uri = URI.parse(referer)
 
     if uri.host == host and is_binary(uri.path) and String.starts_with?(uri.path, "/") do
-      (uri.path || "/") <> if(uri.query, do: "?" <> uri.query, else: "")
+      uri.path <> if(uri.query, do: "?" <> uri.query, else: "")
     else
       nil
     end

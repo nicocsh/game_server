@@ -1,4 +1,4 @@
-FROM elixir:1.19-slim
+FROM elixir:1.20-slim
 
 # Install git and other build dependencies
 RUN apt-get update && \

@@ -271,7 +271,6 @@ defmodule GameServerWeb.UserChannelTest do
     {:ok, token2, _} = Guardian.encode_and_sign(other)
 
     {:ok, socket2} = connect(GameServerWeb.UserSocket, %{"token" => token2})
-    require ExUnit.CaptureLog
 
     # the channel logs a warning when an unauthorized join is attempted; capture
     # that log in the test so it doesn't show up as noisy output

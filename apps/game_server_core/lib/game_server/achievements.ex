@@ -26,8 +26,6 @@ defmodule GameServer.Achievements do
   """
 
   import Ecto.Query, warn: false
-  require Logger
-
   use Nebulex.Caching, cache: GameServer.Cache
 
   alias GameServer.Achievements.Achievement

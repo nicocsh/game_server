@@ -622,7 +622,6 @@ defmodule GameServer.Hooks do
           {:ok, {:error, err}} -> {:error, err}
           {:ok, res} -> {:ok, res}
           {:error, reason} -> {:error, reason}
-          other -> {:error, other}
         end
     end
   end

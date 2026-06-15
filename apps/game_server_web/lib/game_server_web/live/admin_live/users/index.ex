@@ -244,7 +244,7 @@ defmodule GameServerWeb.AdminLive.Users.Index do
         total_count = Repo.aggregate(User, :count)
         total_pages = if page_size > 0, do: div(total_count + page_size - 1, page_size), else: 0
 
-        page = max(1, min(page, total_pages || 1))
+        page = max(1, min(page, total_pages))
 
         users =
           Repo.all(

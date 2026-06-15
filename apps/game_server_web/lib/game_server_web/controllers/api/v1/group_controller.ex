@@ -1253,9 +1253,6 @@ defmodule GameServerWeb.Api.V1.GroupController do
 
             {:error, :not_found} ->
               conn |> put_status(:not_found) |> json(%{error: "not_found"})
-
-            {:error, reason} ->
-              conn |> put_status(:unprocessable_entity) |> json(%{error: to_string(reason)})
           end
       end
     end)
@@ -1354,9 +1351,6 @@ defmodule GameServerWeb.Api.V1.GroupController do
 
             {:error, :not_member} ->
               conn |> put_status(:forbidden) |> json(%{error: "not_member"})
-
-            {:error, reason} ->
-              conn |> put_status(:unprocessable_entity) |> json(%{error: to_string(reason)})
           end
       end
     end)

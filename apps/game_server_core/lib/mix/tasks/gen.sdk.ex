@@ -251,10 +251,6 @@ defmodule Mix.Tasks.Gen.Sdk do
     placeholder_expr_for_return_type(return_type) || fallback_placeholder_by_name(function_name)
   end
 
-  defp stub_return_expression(function_name, _spec_text) when is_atom(function_name) do
-    fallback_placeholder_by_name(function_name)
-  end
-
   defp placeholder_expr_for_return_type(return_type) when is_binary(return_type) do
     placeholder_expr_for_named_types(return_type) ||
       placeholder_expr_for_generics(return_type) ||
@@ -608,7 +604,7 @@ defmodule Mix.Tasks.Gen.Sdk do
           {nil, nil}
       end
 
-    if is_atom(name) and is_list(args_ast) do
+    if is_list(args_ast) do
       arity = length(args_ast)
 
       arg_names =

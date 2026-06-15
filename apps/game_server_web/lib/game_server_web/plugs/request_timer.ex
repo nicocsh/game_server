@@ -62,6 +62,7 @@ defmodule GameServerWeb.Plugs.RequestTimer do
   defp fetched_params(_params), do: %{}
 
   defp sanitize_param(_value, depth) when depth <= 0, do: "..."
+  defp sanitize_param(%Plug.Upload{} = upload, _depth), do: %{filename: upload.filename}
 
   defp sanitize_param(params, depth) when is_map(params) do
     params
@@ -78,7 +79,6 @@ defmodule GameServerWeb.Plugs.RequestTimer do
     |> Enum.map(&sanitize_param(&1, depth - 1))
   end
 
-  defp sanitize_param(%Plug.Upload{} = upload, _depth), do: %{filename: upload.filename}
   defp sanitize_param(value, _depth) when is_binary(value), do: truncate_string(value)
   defp sanitize_param(value, _depth) when is_integer(value), do: value
   defp sanitize_param(value, _depth) when is_float(value), do: value

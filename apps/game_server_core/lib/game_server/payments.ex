@@ -2050,7 +2050,7 @@ defmodule GameServer.Payments do
   defp source_label(nil), do: nil
 
   defp merge_payload(existing, incoming) when is_map(existing) and is_map(incoming) do
-    Map.merge(existing || %{}, incoming || %{})
+    Map.merge(existing, incoming)
   end
 
   defp required_value(map, key) do

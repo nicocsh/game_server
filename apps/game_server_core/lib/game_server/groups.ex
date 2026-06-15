@@ -50,8 +50,6 @@ defmodule GameServer.Groups do
   import Ecto.Query, warn: false
   use Nebulex.Caching, cache: GameServer.Cache
 
-  require Logger
-
   alias GameServer.Friends
   alias GameServer.Groups.Group
   alias GameServer.Groups.GroupInvite
@@ -2186,6 +2184,4 @@ defmodule GameServer.Groups do
       attrs
     end
   end
-
-  defp normalize_params(other), do: other
 end

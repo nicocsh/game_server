@@ -763,7 +763,7 @@ defmodule GameServerWeb.AdminLive.Users do
           )
 
         # ensure current page is within range (if we deleted the last item on last page)
-        page2 = max(1, min(page, total_pages || 1))
+        page2 = max(1, min(page, total_pages))
 
         {users, total_count, total_pages} =
           if page2 != page do
@@ -910,7 +910,7 @@ defmodule GameServerWeb.AdminLive.Users do
     filters = socket.assigns[:filters] || []
 
     {users, total_count, total_pages} = load_users(page, page_size, q, filters)
-    page2 = max(1, min(page, total_pages || 1))
+    page2 = max(1, min(page, total_pages))
 
     {users, total_count, total_pages} =
       if page2 != page do

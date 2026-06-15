@@ -1190,7 +1190,7 @@ defmodule GameServer.Parties do
               )
 
         lobby_attrs =
-          if metadata && metadata != %{},
+          if metadata != %{},
             do: Map.put(lobby_attrs, "metadata", metadata),
             else: lobby_attrs
 

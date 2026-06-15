@@ -415,9 +415,6 @@ defmodule GameServerWeb.Api.V1.FriendController do
 
               {:error, :not_authorized} ->
                 conn |> put_status(:forbidden) |> json(%{error: "forbidden"})
-
-              {:error, reason} ->
-                conn |> put_status(:bad_request) |> json(%{error: to_string(reason)})
             end
         end
 

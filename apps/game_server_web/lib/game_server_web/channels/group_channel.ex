@@ -25,7 +25,6 @@ defmodule GameServerWeb.GroupChannel do
   """
 
   use Phoenix.Channel
-  require Logger
 
   alias GameServer.Accounts
   alias GameServer.Accounts.Scope

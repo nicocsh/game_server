@@ -6,7 +6,7 @@ defmodule GameServerHost.MixProject do
       app: :game_server_host,
       name: "GameServer",
       version: System.get_env("APP_VERSION") || "1.0.0",
-      elixir: "~> 1.19",
+      elixir: "~> 1.20",
       elixirc_paths: ["lib"],
       start_permanent: Mix.env() == :prod,
       listeners: [Phoenix.CodeReloader],

@@ -236,7 +236,7 @@ defmodule GameServerWeb.AdminLive.Sessions do
         total_pages =
           if page_size > 0, do: div(sessions_count + page_size - 1, page_size), else: 0
 
-        page = max(1, min(page, total_pages || 1))
+        page = max(1, min(page, total_pages))
 
         recent_sessions =
           Repo.all(
@@ -297,7 +297,7 @@ defmodule GameServerWeb.AdminLive.Sessions do
         do: div(sessions_count + page_size - 1, page_size),
         else: 0
 
-    page = max(1, min(page, total_pages || 1))
+    page = max(1, min(page, total_pages))
 
     recent_sessions =
       Repo.all(
