@@ -1,6 +1,6 @@
 # Gamend = Game + Backend
 
-I am working on a new open source game server with authentication, users, lobbies, server scripting and admin portal, built with Elixir.
+I am working on a new open source game server with authentication, users, lobbies, payments, server scripting and admin portal, built with Elixir.
 
 - [Github](https://github.com/appsinacup/game_server)
 - [Guides](https://gamend.appsinacup.com/docs/setup)
@@ -19,7 +19,7 @@ This is how it compares with what exists today:
 - Note 1: Since **Gamend** works with SQLite also, hosting a single instance costs just 5$.
 - Note 2: **Nakama** costs after scaling because it either requires manual configuration (hard to setup, not trivial) or enterprise version. **Colyseus** and **Gamend** both scale normally, without any enterprise edition. [reddit/nakama_not_an_opensource_distributed_server](https://www.reddit.com/r/gamedev/comments/7wzmwd/nakama_not_an_opensource_distributed_server_for/)
 
-# Features
+# Features & Payments
 
 a. **Authentication**:
 
@@ -62,6 +62,11 @@ f. **Admin dashboard**
 - User management, lobby overview, basic analytics
 
 ![](gamend/config.png)
+
+g. **Payments and store integrations**
+
+- Stripe Checkout, Google Play, App Store, and Steam flows
+- Receipt validation, signed webhooks, entitlements, refunds, and admin tools
 
 # Roadmap
 

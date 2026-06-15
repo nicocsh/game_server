@@ -11,7 +11,8 @@
     "hero-bell-solid",
     "hero-shield-check-solid",
     "hero-computer-desktop-solid",
-    "hero-globe-alt-solid"
+    "hero-globe-alt-solid",
+    "hero-credit-card-solid"
   ],
   "description": "**Ανοικτός κώδικας** Elixir game server for **real-time** multiplayer games.",
   "features": [
@@ -31,7 +32,7 @@
       "title": "Φίλοι, Ομάδες & Συνομιλίες"
     },
     {
-      "description": "Server-authoritative achievements and leaderboards. Real-time notifications across all features.",
+      "description": "Server-authoritative achievements and leaderboards. Real-time notifications across features and payment events.",
       "icon": "hero-trophy-solid",
       "title": "Επιτεύγματα, Πίνακες Κατάταξης & Ειδοποιήσεις"
     },
@@ -39,6 +40,11 @@
       "description": "Extend server logic with Elixir scripts. Schedule automated tasks and cron jobs.",
       "icon": "hero-computer-desktop-solid",
       "title": "Server Scripting & Scheduling"
+    },
+    {
+      "title": "Payments & Store Integrations",
+      "description": "Stripe Checkout, Google Play, App Store, and Steam purchase flows with receipt validation, signed webhooks, entitlements, refunds, and admin tools.",
+      "icon": "hero-credit-card-solid"
     },
     {
       "description": "REST API, real-time WebSocket channels and low-latency WebRTC DataChannels. Admin portal and web UI.",

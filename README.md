@@ -1,14 +1,14 @@
-![gamend banner](https://github.com/appsinacup/game_server/blob/main/apps/game_server_web/priv/static/images/banner.png?raw=true)
+![gamend banner](https://github.com/appsinacup/game_server/blob/main/priv/static/images/banner.png?raw=true)
 
 # Gamend
 
-**Open source Elixir game server with authentication, users, lobbies, groups, parties, friends, chat, notifications, achievements, leaderboards, server scripting and an admin portal with HTTP, WebSocket, and WebRTC support and SDK for JS and Godot.**
+**Open source Elixir game server with authentication, users, lobbies, groups, parties, friends, chat, notifications, achievements, leaderboards, payments, server scripting and an admin portal with HTTP, WebSocket, and WebRTC support and SDK for JS and Godot.**
 
 Game + Backend = Gamend
 
 [Discord](https://discord.com/invite/v649emcpAu) | [Guides](https://gamend.appsinacup.com/docs/setup) | [API Docs](https://gamend.appsinacup.com/api/docs) | [Elixir Docs](https://appsinacup.github.io/game_server/) | [Starter Template](https://github.com/appsinacup/gamend_starter)
 
-## Features
+## Features & Payments
 
 - **Auth** — Email/password, magic link, OAuth (Discord, Google, Apple, Facebook, Steam), JWT API tokens
 - **Users** — Profiles, metadata, device tokens, account lifecycle
@@ -20,6 +20,7 @@ Game + Backend = Gamend
 - **Notifications** — Typed notifications for all social events, read/unread, real-time delivery
 - **Achievements** — Progress tracking, hidden achievements, unlock percentage (rarity), admin management
 - **Leaderboards** — Global and per-user rankings
+- **Payments** — Stripe Checkout, Google Play, App Store, and Steam provider flows with receipt validation, webhooks, entitlements, refunds, and admin tools
 - **Key-Value Store** — Server-side key-value storage with access control hooks
 - **Server Scripting** — Elixir hooks on server events (login, lobby created, achievement unlocked, etc.)
 - **Admin Portal** — Built-in web dashboard for managing all resources

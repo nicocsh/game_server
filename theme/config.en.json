@@ -94,7 +94,7 @@
         },
         {
           "title": "Achievements, Leaderboards & Notifications",
-          "text": "Server-authoritative achievements and leaderboards. Real-time notifications across all features.",
+          "text": "Server-authoritative achievements and leaderboards. Real-time notifications across features and payment events.",
           "icon": "hero-trophy-solid",
           "media_width": "third",
           "image_position_desktop": "right",
@@ -344,6 +344,7 @@
     "hero-bell-solid",
     "hero-shield-check-solid",
     "hero-computer-desktop-solid",
-    "hero-globe-alt-solid"
+    "hero-globe-alt-solid",
+    "hero-credit-card-solid"
   ]
 }

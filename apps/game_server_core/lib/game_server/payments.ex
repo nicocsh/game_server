@@ -1712,9 +1712,8 @@ defmodule GameServer.Payments do
             normalize_params(subscription)
 
           {:error, reason} ->
-            Logger.warning("Stripe subscription retrieve failed",
-              subscription_id: subscription_id,
-              reason: inspect(reason)
+            Logger.warning(
+              "Stripe subscription retrieve failed subscription_id=#{subscription_id} reason=#{inspect(reason)}"
             )
 
             %{"id" => subscription_id}

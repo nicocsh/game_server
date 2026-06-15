@@ -17,7 +17,7 @@ defmodule GameServerWeb.ApiSpec do
         title: "Game Server API",
         version: api_version(),
         description: """
-        API for the Gamend Game Server. Provides HTTP REST API, real-time WebSocket channels, and WebRTC DataChannels for low-latency game data. Features authentication, users, lobbies, groups, parties, friends, chat, notifications, achievements, leaderboards, server scripting, and admin portal.
+        API for the Gamend Game Server. Provides HTTP REST API, real-time WebSocket channels, and WebRTC DataChannels for low-latency game data. Features authentication, users, lobbies, groups, parties, friends, chat, notifications, achievements, leaderboards, payments, server scripting, and admin portal.
 
         ## **1. Authentication**
 

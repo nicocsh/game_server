@@ -1,6 +1,6 @@
 # GameServer Web
 
-Web interface for Gamend GameServer, built with Phoenix Framework. Provides APIs, authentication, and real-time features.
+Web interface for Gamend GameServer, built with Phoenix Framework. Provides APIs, authentication, real-time features, and payments.
 
 ## Installation
 

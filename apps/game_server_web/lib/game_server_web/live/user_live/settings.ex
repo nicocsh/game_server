@@ -2753,12 +2753,10 @@ defmodule GameServerWeb.UserLive.Settings do
   end
 
   defp payment_entitlement_period_value(entitlement) do
-    cond do
-      payment_entitlement_kind(entitlement) == "subscription" and is_nil(entitlement.expires_at) ->
-        gettext("Auto-renews")
-
-      true ->
-        payment_datetime(entitlement.expires_at)
+    if payment_entitlement_kind(entitlement) == "subscription" and is_nil(entitlement.expires_at) do
+      gettext("Auto-renews")
+    else
+      payment_datetime(entitlement.expires_at)
     end
   end
 

@@ -11,7 +11,8 @@
     "hero-bell-solid",
     "hero-shield-check-solid",
     "hero-computer-desktop-solid",
-    "hero-globe-alt-solid"
+    "hero-globe-alt-solid",
+    "hero-credit-card-solid"
   ],
   "description": "Server de jocuri Elixir **open source** pentru jocuri multiplayer **în timp real**.",
   "features": [
@@ -39,6 +40,11 @@
       "description": "Extindeți logica serverului cu scripturi Elixir. Programați sarcini automate și cron job-uri.",
       "icon": "hero-computer-desktop-solid",
       "title": "Scriptare și programare server"
+    },
+    {
+      "title": "Payments & Store Integrations",
+      "description": "Stripe Checkout, Google Play, App Store, and Steam purchase flows with receipt validation, signed webhooks, entitlements, refunds, and admin tools.",
+      "icon": "hero-credit-card-solid"
     },
     {
       "description": "API REST, canale WebSocket în timp real și canale de date WebRTC cu latență redusă. Portal de administrare și interfață web.",
