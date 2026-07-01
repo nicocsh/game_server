@@ -8,9 +8,9 @@ defmodule GameServerWeb.UserChannel do
   ## Online presence
 
   When a user joins the channel their `is_online` flag is set to `true` in the
-  database and a `"friend_online"` event is pushed to every accepted friend's
+  database and a `"friend_updated"` event is pushed to every accepted friend's
   channel.  When the last channel process for a user terminates the flag is
-  reset and a `"friend_offline"` event is pushed.
+  reset and pushed through the same `"friend_updated"` event.
 
   ## Notifications
 
@@ -27,19 +27,29 @@ defmodule GameServerWeb.UserChannel do
 
   This avoids the HTTP round-trip of `POST /api/v1/hooks/call` while the
   socket is connected.  The caller context (user) is injected automatically.
+
+  ## KV RPC
+
+  Clients can subscribe to a key/scope and receive `"kv_updated"` /
+  `"kv_deleted"` pushes when that KV entry changes:
+
+      push("kv:subscribe", %{key: "my_key", user_id: 123})
+      -> reply {:ok, %{subscribed: true, ...}}
   """
 
   use Phoenix.Channel
   require Logger
 
-  intercept ["updated"]
+  intercept ["updated", "friend_updated"]
 
   alias GameServer.Accounts
   alias GameServer.Accounts.Scope
   alias GameServer.Accounts.User
   alias GameServer.Friends
   alias GameServer.Groups
+  alias GameServer.Hooks
   alias GameServer.Hooks.PluginManager
+  alias GameServer.KV
   alias GameServer.Lobbies
   alias GameServer.Notifications
   alias GameServer.Parties
@@ -117,6 +127,54 @@ defmodule GameServerWeb.UserChannel do
     end
   end
 
+  # ── KV subscriptions via channel ────────────────────────────────────────────
+
+  @impl true
+  def handle_in("kv:subscribe", %{"key" => key} = payload, socket) when is_binary(key) do
+    with :ok <- check_ws_rate_limit(socket) do
+      user_id = parse_optional_int(Map.get(payload, "user_id"))
+      lobby_id = parse_optional_int(Map.get(payload, "lobby_id"))
+
+      if kv_read_allowed?(socket, key, user_id, lobby_id) do
+        :ok = KV.subscribe(key, user_id: user_id, lobby_id: lobby_id)
+        {:reply, {:ok, kv_subscribe_reply(key, user_id, lobby_id, payload)}, socket}
+      else
+        {:reply, {:error, kv_reply_payload(%{error: "forbidden"}, payload)}, socket}
+      end
+    end
+  end
+
+  @impl true
+  def handle_in("kv:subscribe", payload, socket) do
+    with :ok <- check_ws_rate_limit(socket) do
+      {:reply, {:error, kv_reply_payload(%{error: "invalid_key"}, payload)}, socket}
+    end
+  end
+
+  @impl true
+  def handle_in("kv:unsubscribe", %{"key" => key} = payload, socket) when is_binary(key) do
+    with :ok <- check_ws_rate_limit(socket) do
+      user_id = parse_optional_int(Map.get(payload, "user_id"))
+      lobby_id = parse_optional_int(Map.get(payload, "lobby_id"))
+
+      :ok = KV.unsubscribe(key, user_id: user_id, lobby_id: lobby_id)
+
+      {:reply,
+       {:ok,
+        kv_reply_payload(
+          %{unsubscribed: true, key: key, user_id: user_id, lobby_id: lobby_id},
+          payload
+        )}, socket}
+    end
+  end
+
+  @impl true
+  def handle_in("kv:unsubscribe", payload, socket) do
+    with :ok <- check_ws_rate_limit(socket) do
+      {:reply, {:error, kv_reply_payload(%{error: "invalid_key"}, payload)}, socket}
+    end
+  end
+
   # ── WebRTC signaling via channel ────────────────────────────────────────────
 
   @impl true
@@ -190,6 +248,31 @@ defmodule GameServerWeb.UserChannel do
   end
 
   @impl true
+  def handle_out("friend_updated", payload, socket) do
+    user_id = friend_user_id(payload)
+
+    if is_nil(user_id) do
+      {:noreply, socket}
+    else
+      key = Integer.to_string(user_id)
+      last_friend_payloads = Map.get(socket.assigns, :last_friend_payloads, %{})
+      last_payload = Map.get(last_friend_payloads, key)
+      payload = preserve_friendship_id(last_payload, payload)
+
+      case friend_payload_delta(last_payload, payload) do
+        nil ->
+          {:noreply, socket}
+
+        delta_payload ->
+          push(socket, "friend_updated", %{friends: %{key => delta_payload}})
+
+          {:noreply,
+           assign(socket, :last_friend_payloads, Map.put(last_friend_payloads, key, payload))}
+      end
+    end
+  end
+
+  @impl true
   def handle_out(event, payload, socket) do
     push(socket, event, payload)
     {:noreply, socket}
@@ -203,7 +286,6 @@ defmodule GameServerWeb.UserChannel do
         {:ok, updated_user} ->
           payload = Accounts.serialize_user_payload(updated_user)
           push(socket, "updated", payload)
-          broadcast_online_status(updated_user.id, true)
           broadcast_member_presence(updated_user.id, true)
           assign(socket, :last_user_payload, payload)
 
@@ -215,6 +297,8 @@ defmodule GameServerWeb.UserChannel do
 
     # Subscribe to notifications PubSub
     Notifications.subscribe(user.id)
+
+    socket = push_initial_friend_update(socket, user.id)
 
     # Push all existing (undeleted) notifications in chronological order
     push_existing_notifications(socket, user.id)
@@ -237,6 +321,34 @@ defmodule GameServerWeb.UserChannel do
     end
 
     Process.send_after(self(), :refresh_presence, @presence_refresh_interval)
+    {:noreply, socket}
+  end
+
+  # ── KV PubSub events ────────────────────────────────────────────────────────
+
+  @impl true
+  def handle_info({:kv_updated, payload}, socket) do
+    key = Map.get(payload, :key)
+    user_id = Map.get(payload, :user_id)
+    lobby_id = Map.get(payload, :lobby_id)
+
+    if is_binary(key) and kv_read_allowed?(socket, key, user_id, lobby_id) do
+      push(socket, "kv_updated", payload)
+    end
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:kv_deleted, payload}, socket) do
+    key = Map.get(payload, :key)
+    user_id = Map.get(payload, :user_id)
+    lobby_id = Map.get(payload, :lobby_id)
+
+    if is_binary(key) and kv_read_allowed?(socket, key, user_id, lobby_id) do
+      push(socket, "kv_deleted", payload)
+    end
+
     {:noreply, socket}
   end
 
@@ -377,7 +489,6 @@ defmodule GameServerWeb.UserChannel do
       if other_channels == 0 do
         case Accounts.set_user_offline(user_id) do
           {:ok, _} ->
-            broadcast_online_status(user_id, false)
             broadcast_member_presence(user_id, false)
 
           _ ->
@@ -402,30 +513,146 @@ defmodule GameServerWeb.UserChannel do
     end)
   end
 
-  # Broadcast online/offline status change to all accepted friends' user channels.
-  defp broadcast_online_status(user_id, online?) do
-    event = if online?, do: "friend_online", else: "friend_offline"
-    user = Accounts.get_user(user_id)
+  defp push_initial_friend_update(socket, user_id) do
+    friend_payloads =
+      user_id
+      |> Friends.list_friends_with_friendship(page: 1, page_size: 1000)
+      |> Map.new(fn friendship ->
+        payload = serialize_friend_update(friendship)
+        {Integer.to_string(payload.user_id), payload}
+      end)
 
-    payload =
-      if user do
-        User.serialize_brief(user) |> Map.put(:user_id, user_id)
-      else
-        %{user_id: user_id, display_name: "", is_online: online?}
-      end
-
-    friend_ids = Friends.friend_ids(user_id)
-
-    Enum.each(friend_ids, fn friend_id ->
-      topic = "user:#{friend_id}"
-
-      Phoenix.PubSub.broadcast(
-        GameServer.PubSub,
-        topic,
-        %Phoenix.Socket.Broadcast{topic: topic, event: event, payload: payload}
-      )
-    end)
+    push(socket, "friend_updated", %{friends: friend_payloads})
+    assign(socket, :last_friend_payloads, friend_payloads)
   end
+
+  defp serialize_friend_update(%{friendship_id: friendship_id, user: %User{} = user}) do
+    user
+    |> User.serialize_brief()
+    |> Map.put(:user_id, user.id)
+    |> Map.put(:friendship_id, friendship_id)
+  end
+
+  defp friend_user_id(payload) when is_map(payload) do
+    Map.get(payload, :user_id) || Map.get(payload, "user_id") || Map.get(payload, :id) ||
+      Map.get(payload, "id")
+  end
+
+  defp friend_user_id(_payload), do: nil
+
+  defp friend_payload_delta(nil, new_payload), do: new_payload
+
+  defp friend_payload_delta(old_payload, new_payload) do
+    case PayloadDelta.payload_delta(old_payload, new_payload) do
+      nil ->
+        nil
+
+      delta ->
+        delta
+        |> Map.drop([:id, "id", :user_id, "user_id"])
+        |> empty_map_to_nil()
+    end
+  end
+
+  defp empty_map_to_nil(map) when map_size(map) == 0, do: nil
+  defp empty_map_to_nil(map), do: map
+
+  defp preserve_friendship_id(nil, payload), do: payload
+
+  defp preserve_friendship_id(last_payload, payload) do
+    cond do
+      Map.has_key?(payload, :friendship_id) or Map.has_key?(payload, "friendship_id") ->
+        payload
+
+      friendship_id =
+          Map.get(last_payload, :friendship_id) || Map.get(last_payload, "friendship_id") ->
+        Map.put(payload, :friendship_id, friendship_id)
+
+      true ->
+        payload
+    end
+  end
+
+  defp kv_read_allowed?(socket, key, user_id, lobby_id) do
+    caller = fresh_current_scope(socket)
+
+    case Hooks.internal_call(:before_kv_get, [key, %{user_id: user_id, lobby_id: lobby_id}],
+           caller: caller
+         ) do
+      {:ok, access} -> kv_access_allowed?(access, caller, user_id, lobby_id)
+      {:error, _} -> false
+    end
+  end
+
+  defp fresh_current_scope(socket) do
+    user = Accounts.get_user(socket.assigns.user_id) || socket.assigns.current_scope.user
+    Scope.for_user(user)
+  end
+
+  defp kv_subscribe_reply(key, user_id, lobby_id, payload) do
+    reply = %{subscribed: true, key: key, user_id: user_id, lobby_id: lobby_id}
+
+    case KV.get(key, user_id: user_id, lobby_id: lobby_id) do
+      {:ok, %{value: value, metadata: metadata}} ->
+        reply
+        |> Map.put(:data, value)
+        |> Map.put(:metadata, metadata)
+        |> kv_reply_payload(payload)
+
+      :error ->
+        reply
+        |> Map.put(:missing, true)
+        |> kv_reply_payload(payload)
+    end
+  end
+
+  defp kv_reply_payload(reply, %{"_request_id" => request_id}) when is_binary(request_id),
+    do: Map.put(reply, :_request_id, request_id)
+
+  defp kv_reply_payload(reply, %{_request_id: request_id}) when is_binary(request_id),
+    do: Map.put(reply, :_request_id, request_id)
+
+  defp kv_reply_payload(reply, _payload), do: reply
+
+  defp kv_access_allowed?(:public, _caller, _user_id, _lobby_id), do: true
+
+  defp kv_access_allowed?(:owner_only, caller, user_id, _lobby_id),
+    do: caller_owns?(caller, user_id)
+
+  defp kv_access_allowed?(:lobby_members_only, caller, _user_id, lobby_id),
+    do: caller_in_lobby?(caller, lobby_id)
+
+  defp kv_access_allowed?(:owner_or_lobby_member, caller, user_id, lobby_id),
+    do: caller_owns?(caller, user_id) or caller_in_lobby?(caller, lobby_id)
+
+  defp kv_access_allowed?(:admin_only, caller, _user_id, _lobby_id), do: caller_admin?(caller)
+  defp kv_access_allowed?(:server_only, _caller, _user_id, _lobby_id), do: false
+  defp kv_access_allowed?(_access, _caller, _user_id, _lobby_id), do: false
+
+  defp caller_owns?(%Scope{user: %{id: caller_id}}, user_id),
+    do: is_integer(user_id) and caller_id == user_id
+
+  defp caller_owns?(_caller, _user_id), do: false
+
+  defp caller_in_lobby?(%Scope{user: %{lobby_id: caller_lobby_id}}, lobby_id),
+    do: is_integer(lobby_id) and caller_lobby_id == lobby_id
+
+  defp caller_in_lobby?(_caller, _lobby_id), do: false
+
+  defp caller_admin?(%Scope{user: %{is_admin: true}}), do: true
+  defp caller_admin?(_caller), do: false
+
+  defp parse_optional_int(nil), do: nil
+  defp parse_optional_int(value) when is_integer(value), do: value
+
+  defp parse_optional_int(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, _rest} -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_optional_int(_value), do: nil
 
   # Broadcast member_online/member_offline to the user's current lobby, party, and group channels.
   defp broadcast_member_presence(user_id, online?) do

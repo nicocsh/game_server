@@ -17,6 +17,7 @@ var enable_logs := false
 var _token_provider: Callable
 var _channels := {}
 var _payload_cache := {}
+var _request_seq := 0
 const LOG_REDACTED := "[redacted]"
 const DELTA_UPDATE_KEY := "u"
 const DELTA_REMOVE_KEY := "r"
@@ -93,6 +94,59 @@ func push(event: String, payload: Dictionary = {}, topic: String = "") -> bool:
 		return false
 	return ch.push(event, payload)
 
+func request(event: String, payload: Dictionary = {}, topic: String = "", timeout_sec: float = 15.0) -> Dictionary:
+	var ch: PhoenixChannel
+	var reply_topic := topic
+	if topic == "":
+		ch = _get_user_channel()
+		if ch != null:
+			reply_topic = ch.get_topic()
+	elif _channels.has(topic):
+		ch = _channels[topic]
+	if ch == null:
+		return _request_error("no_channel", "No channel found for request")
+
+	var request_id := _next_request_id()
+	var request_payload := payload.duplicate(true)
+	request_payload["_request_id"] = request_id
+	var state := {
+		"done": false,
+		"payload": {},
+		"status": "error",
+	}
+	var handler := func(reply_event: String, reply_payload: Dictionary, status, event_topic: String) -> void:
+		if reply_event != event or event_topic != reply_topic:
+			return
+		if str(reply_payload.get("_request_id", "")) != request_id:
+			return
+		state["done"] = true
+		state["payload"] = reply_payload.duplicate(true)
+		state["status"] = str(status)
+
+	channel_event.connect(handler)
+	var pushed := ch.push(event, request_payload)
+	if not pushed:
+		if channel_event.is_connected(handler):
+			channel_event.disconnect(handler)
+		return _request_error("push_failed", "Channel rejected request")
+
+	var tree := get_tree()
+	if tree == null:
+		if channel_event.is_connected(handler):
+			channel_event.disconnect(handler)
+		return _request_error("no_scene_tree", "Cannot wait for channel reply")
+
+	var started_ms := Time.get_ticks_msec()
+	var timeout_ms := int(max(0.1, timeout_sec) * 1000.0)
+	while not bool(state["done"]) and Time.get_ticks_msec() - started_ms < timeout_ms:
+		await tree.process_frame
+
+	if channel_event.is_connected(handler):
+		channel_event.disconnect(handler)
+	if bool(state["done"]):
+		return {"status": state["status"], "payload": state["payload"]}
+	return _request_error("timeout", "Channel request timed out")
+
 func _socket_on_open(params):
 	if enable_logs:
 		print("Socket Open ", _redact_for_log(params))
@@ -160,6 +214,19 @@ func _get_user_channel() -> PhoenixChannel:
 
 func _socket_params() -> Dictionary:
 	return {"token": _token_provider.call()}
+
+func _next_request_id() -> String:
+	_request_seq += 1
+	return "%s:%d:%d" % [str(get_instance_id()), Time.get_ticks_msec(), _request_seq]
+
+func _request_error(error_name: String, message: String) -> Dictionary:
+	return {
+		"status": "error",
+		"payload": {
+			"error": error_name,
+			"message": message,
+		},
+	}
 
 func _expand_payload_delta(topic: String, event: String, payload: Dictionary) -> Dictionary:
 	_update_payload_cache_for_related_events(topic, event, payload)

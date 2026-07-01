@@ -334,7 +334,7 @@ defmodule GameServerWeb.UserChannelTest do
     assert payload.id == updated_user.id
   end
 
-  test "user channel sets is_online on join and broadcasts friend_online to friends" do
+  test "user channel sets is_online on join and broadcasts friend_updated to friends" do
     a = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
     b = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
 
@@ -342,15 +342,16 @@ defmodule GameServerWeb.UserChannelTest do
     {:ok, f} = GameServer.Friends.create_request(a.id, b.id)
     {:ok, _} = GameServer.Friends.accept_friend_request(f.id, b)
 
-    # User b joins their channel first (to listen for friend_online from a)
+    # User b joins their channel first (to listen for friend_updated from a)
     {:ok, token_b, _} = Guardian.encode_and_sign(b)
     {:ok, socket_b} = connect(GameServerWeb.UserSocket, %{"token" => token_b})
     {:ok, _, _socket_b} = subscribe_and_join(socket_b, "user:#{b.id}", %{})
 
-    # Drain b's initial "updated" push
     assert_push "updated", _b_initial
+    assert_push "friend_updated", b_initial_friends
+    assert b_initial_friends.friends[Integer.to_string(a.id)].is_online == false
 
-    # User a joins — triggers set_user_online + friend_online broadcast
+    # User a joins — triggers set_user_online + friend_updated broadcast
     {:ok, token_a, _} = Guardian.encode_and_sign(a)
     {:ok, socket_a} = connect(GameServerWeb.UserSocket, %{"token" => token_a})
     {:ok, _, _socket_a} = subscribe_and_join(socket_a, "user:#{a.id}", %{})
@@ -360,15 +361,95 @@ defmodule GameServerWeb.UserChannelTest do
     assert a_payload.id == a.id
     assert a_payload.is_online == true
 
-    # b should receive a "friend_online" event about a
-    assert_push "friend_online", friend_online_payload
-    assert friend_online_payload.user_id == a.id
-    assert friend_online_payload.is_online == true
+    assert_push "friend_updated", friend_payload
+    assert friend_payload.friends[Integer.to_string(a.id)].u.is_online == true
+    refute_push "friend_online", _, 100
 
     # Verify DB state
     refreshed_a = GameServer.Accounts.get_user!(a.id)
     assert refreshed_a.is_online == true
     assert refreshed_a.last_seen_at != nil
+  end
+
+  test "user channel broadcasts offline friend_updated to friends on disconnect" do
+    a = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
+    b = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
+
+    {:ok, f} = GameServer.Friends.create_request(a.id, b.id)
+    {:ok, _} = GameServer.Friends.accept_friend_request(f.id, b)
+
+    {:ok, token_b, _} = Guardian.encode_and_sign(b)
+    {:ok, socket_b} = connect(GameServerWeb.UserSocket, %{"token" => token_b})
+    {:ok, _, _socket_b} = subscribe_and_join(socket_b, "user:#{b.id}", %{})
+
+    assert_push "updated", _b_initial
+    assert_push "friend_updated", b_initial_friends
+    assert b_initial_friends.friends[Integer.to_string(a.id)].is_online == false
+
+    {:ok, token_a, _} = Guardian.encode_and_sign(a)
+    {:ok, socket_a} = connect(GameServerWeb.UserSocket, %{"token" => token_a})
+    {:ok, _, socket_a} = subscribe_and_join(socket_a, "user:#{a.id}", %{})
+
+    assert_push "updated", %{id: a_id, is_online: true}
+    assert a_id == a.id
+
+    friend_key = Integer.to_string(a.id)
+
+    assert_receive %Phoenix.Socket.Message{
+                     event: "friend_updated",
+                     payload: %{friends: %{^friend_key => online_payload}}
+                   },
+                   1000
+
+    assert online_payload.u.is_online == true
+
+    Process.unlink(socket_a.channel_pid)
+    :ok = close(socket_a)
+
+    assert_receive %Phoenix.Socket.Message{
+                     event: "friend_updated",
+                     payload: %{friends: %{^friend_key => offline_payload}}
+                   },
+                   1000
+
+    assert offline_payload.u.is_online == false
+    refute_push "friend_offline", _, 100
+  end
+
+  test "user channel sends accepted friends in initial friend_updated on join" do
+    user = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
+
+    friend = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
+    pending = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
+
+    {:ok, friend} =
+      GameServer.Accounts.update_user(friend, %{
+        metadata: %{"map_country_id" => "ro", "map_city_id" => "sighetu-marmatiei"}
+      })
+
+    {:ok, accepted} = GameServer.Friends.create_request(user.id, friend.id)
+    {:ok, _} = GameServer.Friends.accept_friend_request(accepted.id, friend)
+    {:ok, _pending} = GameServer.Friends.create_request(user.id, pending.id)
+
+    {:ok, token, _} = Guardian.encode_and_sign(user)
+    {:ok, socket} = connect(GameServerWeb.UserSocket, %{"token" => token})
+    {:ok, _, _socket} = subscribe_and_join(socket, "user:#{user.id}", %{})
+
+    assert_push "updated", _initial
+    assert_push "friend_updated", payload
+
+    assert [friend_key] = Map.keys(payload.friends)
+    assert friend_key == Integer.to_string(friend.id)
+    friend_payload = payload.friends[friend_key]
+    assert friend_payload.user_id == friend.id
+    assert friend_payload.friendship_id == accepted.id
+
+    assert friend_payload.metadata == %{
+             "map_country_id" => "ro",
+             "map_city_id" => "sighetu-marmatiei"
+           }
+
+    refute Map.has_key?(payload.friends, Integer.to_string(pending.id))
   end
 
   test "user channel broadcasts friend_updated to accepted friends" do
@@ -383,16 +464,19 @@ defmodule GameServerWeb.UserChannelTest do
     {:ok, _, _socket_b} = subscribe_and_join(socket_b, "user:#{b.id}", %{})
 
     assert_push "updated", _b_initial
+    assert_push "friend_updated", _b_initial_friends
 
     {:ok, _updated_a} =
       GameServer.Accounts.update_user(a, %{
         metadata: %{"map_country_id" => "ro", "map_city_id" => "sighetu-marmatiei"}
       })
 
-    assert_push "friend_updated", friend_payload, 1000
-    assert friend_payload.user_id == a.id
+    assert_push "friend_updated", payload, 1000
+    friend_payload = payload.friends[Integer.to_string(a.id)]
 
-    assert friend_payload.metadata == %{
+    refute Map.has_key?(friend_payload, :r)
+
+    assert friend_payload.u.metadata == %{
              "map_country_id" => "ro",
              "map_city_id" => "sighetu-marmatiei"
            }
@@ -410,6 +494,7 @@ defmodule GameServerWeb.UserChannelTest do
     {:ok, _, _socket_a} = subscribe_and_join(socket_a, "user:#{a.id}", %{})
 
     assert_push "updated", _a_initial
+    assert_push "friend_updated", _a_initial_friends
 
     {:ok, _updated_a} =
       GameServer.Accounts.update_user(a, %{
@@ -432,6 +517,8 @@ defmodule GameServerWeb.UserChannelTest do
     {:ok, _, _socket_b} = subscribe_and_join(socket_b, "user:#{b.id}", %{})
 
     assert_push "updated", _b_initial
+    assert_push "friend_updated", %{friends: friends}
+    assert friends == %{}
 
     {:ok, _updated_a} =
       GameServer.Accounts.update_user(a, %{
@@ -453,6 +540,8 @@ defmodule GameServerWeb.UserChannelTest do
     {:ok, _, _socket_b} = subscribe_and_join(socket_b, "user:#{b.id}", %{})
 
     assert_push "updated", _b_initial
+    assert_push "friend_updated", %{friends: friends}
+    assert friends == %{}
 
     {:ok, _updated_a} =
       GameServer.Accounts.update_user(a, %{
@@ -475,6 +564,8 @@ defmodule GameServerWeb.UserChannelTest do
     {:ok, _, _socket_b} = subscribe_and_join(socket_b, "user:#{b.id}", %{})
 
     assert_push "updated", _b_initial
+    assert_push "friend_updated", %{friends: friends}
+    assert friends == %{}
 
     {:ok, _updated_a} =
       GameServer.Accounts.update_user(a, %{
@@ -484,7 +575,7 @@ defmodule GameServerWeb.UserChannelTest do
     refute_push "friend_updated", _, 100
   end
 
-  test "deleting a user who is online sends friend_offline to friends" do
+  test "deleting a user who is online sends offline friend_updated to friends" do
     a = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
     b = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
 
@@ -495,20 +586,20 @@ defmodule GameServerWeb.UserChannelTest do
     # Mark a as online
     {:ok, _} = GameServer.Accounts.set_user_online(a)
 
-    # b joins their channel to listen for friend_offline
+    # b joins their channel to listen for friend_updated
     {:ok, token_b, _} = Guardian.encode_and_sign(b)
     {:ok, socket_b} = connect(GameServerWeb.UserSocket, %{"token" => token_b})
     {:ok, _, _socket_b} = subscribe_and_join(socket_b, "user:#{b.id}", %{})
 
-    # Drain b's initial "updated" push
     assert_push "updated", _b_initial
+    assert_push "friend_updated", b_initial_friends
+    assert b_initial_friends.friends[Integer.to_string(a.id)].is_online == true
 
     # Delete user a
     {:ok, _} = GameServer.Accounts.delete_user(a)
 
-    # b should receive a "friend_offline" event about a
-    assert_push "friend_offline", friend_offline_payload, 1000
-    assert friend_offline_payload.user_id == a.id
-    assert friend_offline_payload.is_online == false
+    assert_push "friend_updated", payload, 1000
+    assert payload.friends[Integer.to_string(a.id)].u.is_online == false
+    refute_push "friend_offline", _, 100
   end
 end

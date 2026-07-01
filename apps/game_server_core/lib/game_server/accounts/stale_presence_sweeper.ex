@@ -98,7 +98,7 @@ defmodule GameServer.Accounts.StalePresenceSweeper do
     Enum.each(stale_users, fn user_id ->
       case Accounts.set_user_offline(user_id) do
         {:ok, _} ->
-          Accounts.broadcast_friend_offline(user_id)
+          :ok
 
         {:error, reason} ->
           Logger.warning(

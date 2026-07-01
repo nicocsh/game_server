@@ -72,6 +72,36 @@ defmodule GameServer.KV do
         ]
 
   @kv_cache_ttl_ms 60_000
+  @pubsub GameServer.PubSub
+
+  @doc """
+  Subscribe the current process to changes for a specific key/scope.
+  """
+  @spec subscribe(String.t(), keyword()) :: :ok | {:error, term()}
+  def subscribe(key, opts \\ []) when is_binary(key) and is_list(opts) do
+    Phoenix.PubSub.subscribe(
+      @pubsub,
+      topic(key, Keyword.get(opts, :user_id), Keyword.get(opts, :lobby_id))
+    )
+  end
+
+  @doc """
+  Unsubscribe the current process from changes for a specific key/scope.
+  """
+  @spec unsubscribe(String.t(), keyword()) :: :ok | {:error, term()}
+  def unsubscribe(key, opts \\ []) when is_binary(key) and is_list(opts) do
+    Phoenix.PubSub.unsubscribe(
+      @pubsub,
+      topic(key, Keyword.get(opts, :user_id), Keyword.get(opts, :lobby_id))
+    )
+  end
+
+  defp topic(key, nil, nil), do: "kv:global:#{key}"
+  defp topic(key, user_id, nil) when is_integer(user_id), do: "kv:user:#{user_id}:#{key}"
+  defp topic(key, nil, lobby_id) when is_integer(lobby_id), do: "kv:lobby:#{lobby_id}:#{key}"
+
+  defp topic(key, user_id, lobby_id) when is_integer(user_id) and is_integer(lobby_id),
+    do: "kv:user_lobby:#{user_id}:#{lobby_id}:#{key}"
 
   defp entries_cache_version(:all) do
     GameServer.Cache.get({:kv, :entries_version, :all}) || 1
@@ -222,6 +252,7 @@ defmodule GameServer.KV do
         {:ok, entry} ->
           _ = cache_put(key, user_id, lobby_id, entry)
           _ = invalidate_entries_cache(user_id, lobby_id)
+          _ = broadcast_kv_updated(key, user_id, lobby_id, value, metadata)
           {:ok, entry}
 
         {:error, _} = error ->
@@ -275,6 +306,7 @@ defmodule GameServer.KV do
 
     _ = Repo.delete_all(entry_query(key, user_id, lobby_id))
     _ = invalidate_entries_cache(user_id, lobby_id)
+    _ = broadcast_kv_deleted(key, user_id, lobby_id)
     :ok
   end
 
@@ -424,6 +456,7 @@ defmodule GameServer.KV do
         {:ok, entry} ->
           _ = cache_put(entry.key, entry.user_id, entry.lobby_id, entry)
           _ = invalidate_entries_cache(entry.user_id, entry.lobby_id)
+          _ = broadcast_kv_updated(entry)
           {:ok, entry}
 
         {:error, %Ecto.Changeset{} = changeset} ->
@@ -473,6 +506,12 @@ defmodule GameServer.KV do
               _ = cache_put(updated.key, updated.user_id, updated.lobby_id, updated)
               _ = invalidate_entries_cache(entry.user_id, entry.lobby_id)
               _ = invalidate_entries_cache(updated.user_id, updated.lobby_id)
+
+              if cache_key(updated.key, updated.user_id, updated.lobby_id) != old_cache_key do
+                _ = broadcast_kv_deleted(entry.key, entry.user_id, entry.lobby_id)
+              end
+
+              _ = broadcast_kv_updated(updated)
               {:ok, updated}
 
             {:error, %Ecto.Changeset{} = changeset} ->
@@ -515,8 +554,36 @@ defmodule GameServer.KV do
 
         _ = Repo.delete(entry)
         _ = invalidate_entries_cache(entry.user_id, entry.lobby_id)
+        _ = broadcast_kv_deleted(entry.key, entry.user_id, entry.lobby_id)
         :ok
     end
+  end
+
+  defp broadcast_kv_updated(%Entry{} = entry) do
+    broadcast_kv_updated(entry.key, entry.user_id, entry.lobby_id, entry.value, entry.metadata)
+  end
+
+  defp broadcast_kv_updated(key, user_id, lobby_id, value, metadata) do
+    Phoenix.PubSub.broadcast(
+      @pubsub,
+      topic(key, user_id, lobby_id),
+      {:kv_updated,
+       %{
+         key: key,
+         user_id: user_id,
+         lobby_id: lobby_id,
+         data: value,
+         metadata: metadata || %{}
+       }}
+    )
+  end
+
+  defp broadcast_kv_deleted(key, user_id, lobby_id) do
+    Phoenix.PubSub.broadcast(
+      @pubsub,
+      topic(key, user_id, lobby_id),
+      {:kv_deleted, %{key: key, user_id: user_id, lobby_id: lobby_id}}
+    )
   end
 
   defp cache_key(key, nil, nil), do: {:kv, :global, key}

@@ -6,6 +6,8 @@ extends Node
 
 signal notification_emitted(notification: Dictionary)
 signal user_updated(user: Dictionary)
+signal kv_updated(payload: Dictionary)
+signal kv_deleted(payload: Dictionary)
 
 ## Lobby realtime events
 signal lobby_updated(lobby: Dictionary)
@@ -41,10 +43,8 @@ signal party_chat_message(message: Dictionary)
 signal party_chat_message_updated(message: Dictionary)
 signal party_chat_message_deleted(payload: Dictionary)
 
-## Friend online / offline status (pushed to all accepted friends)
-signal friend_online(payload: Dictionary)         ## {user_id, is_online: true}
-signal friend_offline(payload: Dictionary)        ## {user_id, is_online: false}
-signal friend_updated(payload: Dictionary)        ## accepted friend public data changed
+## Accepted friend initial state and public data diffs
+signal friend_updated(payload: Dictionary)
 ## Friend requests
 signal friend_request_outgoing(payload: Dictionary)   ## {id, requester_id, target_id, status}
 signal friend_request_incoming(payload: Dictionary)   ## {id, requester_id, target_id, status}
@@ -348,6 +348,29 @@ func _make_api_error(identifier: String, message: String, internal_code: int) ->
 	error.response_code = 0
 	return error
 
+func _make_ws_api_error(identifier: String, payload: Dictionary, internal_code: int) -> ApiApiErrorClient:
+	var error_name := str(payload.get("error", "websocket_error"))
+	var message := str(payload.get("message", error_name))
+	var error := _make_api_error(identifier, message, internal_code)
+	error.response_code = _websocket_error_response_code(error_name)
+	var response := ApiApiResponseClient.new()
+	response.code = error.response_code
+	response.body = JSON.stringify(payload)
+	response.data = payload
+	error.response = response
+	return error
+
+func _websocket_error_response_code(error_name: String) -> int:
+	match error_name:
+		"invalid_key":
+			return HTTPClient.RESPONSE_BAD_REQUEST
+		"forbidden":
+			return HTTPClient.RESPONSE_FORBIDDEN
+		"not_found":
+			return HTTPClient.RESPONSE_NOT_FOUND
+		_:
+			return 0
+
 func _create_request_timeout_timer(timeout_sec: float) -> SceneTreeTimer:
 	var tree := get_tree()
 	if tree == null and Engine.get_main_loop() is SceneTree:
@@ -603,10 +626,10 @@ func _handle_user_event(event: String, payload: Dictionary):
 			user_updated.emit(payload)
 		"notification":
 			notification_emitted.emit(payload)
-		"friend_online":
-			friend_online.emit(payload)
-		"friend_offline":
-			friend_offline.emit(payload)
+		"kv_updated":
+			kv_updated.emit(payload)
+		"kv_deleted":
+			kv_deleted.emit(payload)
 		"friend_updated":
 			friend_updated.emit(payload)
 		"outgoing_request":
@@ -985,6 +1008,50 @@ func leaderboards_resolve_slugs(slugs: Array) -> GamendResult:
 ## Get a key/value entry 
 func kv_get_kv(key: String, user_id = null, lobby_id = null) -> GamendResult:
 	return await _call_api(KVApi.new(_config), "get_kv", [key, user_id, lobby_id])
+
+## Subscribe to a key/value entry via the user WebSocket channel.
+func kv_subscribe_ws(key: String, user_id = null, lobby_id = null) -> GamendResult:
+	return await _kv_subscription_request_ws("kv:subscribe", key, user_id, lobby_id)
+
+## Unsubscribe from a key/value entry via the user WebSocket channel.
+func kv_unsubscribe_ws(key: String, user_id = null, lobby_id = null) -> GamendResult:
+	return await _kv_subscription_request_ws("kv:unsubscribe", key, user_id, lobby_id)
+
+func _kv_subscription_request_ws(event: String, key: String, user_id = null, lobby_id = null) -> GamendResult:
+	var result := GamendResult.new()
+	var error_prefix := event.replace(":", ".") + ".websocket"
+	if not _realtime:
+		result.error = _make_api_error(error_prefix + ".no_realtime", "Realtime socket is not started.", FAILED)
+		return result
+
+	var payload := {"key": key}
+	if user_id != null:
+		payload["user_id"] = user_id
+	if lobby_id != null:
+		payload["lobby_id"] = lobby_id
+
+	var reply: Dictionary = await _realtime.request(event, payload, "", http_request_timeout_sec)
+	var response_payload: Dictionary = {}
+	if reply.get("payload", {}) is Dictionary:
+		response_payload = (reply["payload"] as Dictionary).duplicate(true)
+	response_payload.erase("_request_id")
+
+	if str(reply.get("status", "error")) == "ok":
+		var response := ApiApiResponseClient.new()
+		response.code = HTTPClient.RESPONSE_OK
+		response.body = JSON.stringify(response_payload)
+		response.data = response_payload
+		result.response = response
+		network_request_succeeded.emit()
+	else:
+		result.error = _make_ws_api_error(error_prefix, response_payload, FAILED)
+		if result.error.response_code not in [
+			HTTPClient.RESPONSE_BAD_REQUEST,
+			HTTPClient.RESPONSE_FORBIDDEN,
+			HTTPClient.RESPONSE_NOT_FOUND,
+		]:
+			network_request_failed.emit(result.error.message)
+	return result
 
 ### ACHIEVEMENTS
 

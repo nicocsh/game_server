@@ -1663,13 +1663,7 @@ defmodule GameServer.Accounts do
     fresh_user = Repo.get(User, user.id)
 
     if fresh_user && fresh_user.is_online do
-      case set_user_offline(fresh_user) do
-        {:ok, _} ->
-          broadcast_friend_offline(user.id)
-
-        _ ->
-          :ok
-      end
+      _ = set_user_offline(fresh_user)
     end
 
     case Repo.delete(user) do
@@ -1687,30 +1681,6 @@ defmodule GameServer.Accounts do
     end
 
     # end delete_user
-  end
-
-  @doc false
-  # Broadcast a friend_offline event to all accepted friends of the given user.
-  # Used during account deletion to let friends know the user went away.
-  @spec broadcast_friend_offline(integer()) :: :ok
-  def broadcast_friend_offline(user_id) when is_integer(user_id) do
-    alias GameServer.Friends
-
-    friend_ids = Friends.friend_ids(user_id)
-
-    Enum.each(friend_ids, fn friend_id ->
-      topic = "user:#{friend_id}"
-
-      Phoenix.PubSub.broadcast(
-        GameServer.PubSub,
-        topic,
-        %Phoenix.Socket.Broadcast{
-          topic: topic,
-          event: "friend_offline",
-          payload: %{user_id: user_id, is_online: false}
-        }
-      )
-    end)
   end
 
   ## Token helper
