@@ -298,39 +298,45 @@ const Hooks = {
   },
   NavbarAutohide: {
     mounted() {
-      const targetId = this.el.dataset.target || "main-navbar"
-      this.navbar = document.getElementById(targetId)
-      if (!this.navbar) return
-
+      this.targetId = this.el.dataset.target || "main-navbar"
+      this.navbar = null
       this.isHidden = false
       this.delay = parseInt(this.el.dataset.autohideDelay || "5000", 10)
+      this.timer = null
 
-      // Create dismiss button inside the navbar (visible while navbar is shown)
       this.dismissBtn = document.createElement("button")
       this.dismissBtn.className =
         "btn btn-ghost btn-circle btn-sm ml-1 opacity-60 hover:opacity-100 transition-opacity"
       this.dismissBtn.setAttribute("aria-label", "Hide navigation")
       this.dismissBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>`
-      this.dismissBtn.addEventListener("click", (e) => {
-        e.stopPropagation()
+      this.dismissBtn.addEventListener("click", (event) => {
+        event.preventDefault()
+        event.stopPropagation()
         this.hideNavbar()
       })
-      this.navbar.appendChild(this.dismissBtn)
 
-      // Create the toggle button (visible when navbar is hidden)
       this.toggleBtn = document.createElement("button")
       this.toggleBtn.className =
         "fixed top-3 right-3 z-[60] btn btn-circle btn-sm bg-base-100/60 backdrop-blur-sm border-base-content/10 shadow-md opacity-0 pointer-events-none transition-opacity duration-300"
       this.toggleBtn.setAttribute("aria-label", "Show navigation")
       this.toggleBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`
-      this.toggleBtn.addEventListener("click", () => this.showNavbar())
-      document.body.appendChild(this.toggleBtn)
+      this.toggleBtn.addEventListener("click", (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        this.showNavbar()
+      })
 
-      // Start the autohide timer
-      this.timer = setTimeout(() => this.hideNavbar(), this.delay)
+      document.body.appendChild(this.toggleBtn)
+      this.syncNavbar()
+      this.scheduleAutohide()
+    },
+    updated() {
+      this.syncNavbar()
+      if (!this.isHidden && !this.timer) this.scheduleAutohide()
     },
     destroyed() {
       if (this.timer) clearTimeout(this.timer)
+      if (this.navbar) this.applyVisibleState()
       if (this.dismissBtn) {
         this.dismissBtn.remove()
       }
@@ -338,31 +344,60 @@ const Hooks = {
         this.toggleBtn.remove()
       }
     },
+    syncNavbar() {
+      const navbar = document.getElementById(this.targetId)
+      if (!navbar) return
+
+      this.navbar = navbar
+      this.navbar.appendChild(this.dismissBtn)
+
+      if (this.isHidden) {
+        this.applyHiddenState()
+      } else {
+        this.applyVisibleState()
+      }
+    },
+    scheduleAutohide() {
+      if (!this.navbar) return
+      if (this.timer) clearTimeout(this.timer)
+      this.timer = setTimeout(() => this.hideNavbar(), this.delay)
+    },
     hideNavbar() {
       if (!this.navbar) return
       this.isHidden = true
-      if (this.timer) clearTimeout(this.timer)
+      if (this.timer) {
+        clearTimeout(this.timer)
+        this.timer = null
+      }
+      this.applyHiddenState()
+    },
+    showNavbar() {
+      if (!this.navbar) this.syncNavbar()
+      if (!this.navbar) return
+
+      this.isHidden = false
+      this.applyVisibleState()
+      this.scheduleAutohide()
+    },
+    applyHiddenState() {
+      if (!this.navbar || !this.toggleBtn) return
+
       this.navbar.style.transition = "opacity 0.5s ease, transform 0.5s ease"
       this.navbar.style.opacity = "0"
       this.navbar.style.transform = "translateY(-100%)"
       this.navbar.style.pointerEvents = "none"
-      // Show the toggle button
       this.toggleBtn.style.opacity = "1"
       this.toggleBtn.style.pointerEvents = "auto"
     },
-    showNavbar() {
-      if (!this.navbar) return
-      this.isHidden = false
+    applyVisibleState() {
+      if (!this.navbar || !this.toggleBtn) return
+
       this.navbar.style.transition = "opacity 0.3s ease, transform 0.3s ease"
       this.navbar.style.opacity = "1"
       this.navbar.style.transform = "translateY(0)"
       this.navbar.style.pointerEvents = "auto"
-      // Hide the toggle button
       this.toggleBtn.style.opacity = "0"
       this.toggleBtn.style.pointerEvents = "none"
-      // Re-start autohide timer
-      if (this.timer) clearTimeout(this.timer)
-      this.timer = setTimeout(() => this.hideNavbar(), this.delay)
     }
   },
 
