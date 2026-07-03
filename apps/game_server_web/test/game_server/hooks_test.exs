@@ -99,7 +99,7 @@ defmodule GameServer.HooksTest do
     Application.put_env(:game_server_core, :hooks_module, TestHooksRegister)
 
     user = unconfirmed_user_fixture()
-    {:ok, _online_user} = Accounts.set_user_online(user)
+    {:ok, _online_user} = Accounts.set_user_online(user.id)
 
     # after_user_online runs asynchronously; wait for update
     Process.sleep(50)
@@ -113,8 +113,8 @@ defmodule GameServer.HooksTest do
     Application.put_env(:game_server_core, :hooks_module, TestHooksRegister)
 
     user = unconfirmed_user_fixture()
-    {:ok, _online} = Accounts.set_user_online(user)
-    {:ok, _offline} = Accounts.set_user_offline(user)
+    {:ok, _online} = Accounts.set_user_online(user.id)
+    {:ok, _offline} = Accounts.set_user_offline(user.id)
 
     # after_user_offline runs asynchronously; wait for update
     Process.sleep(50)

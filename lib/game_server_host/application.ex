@@ -30,7 +30,11 @@ defmodule GameServerHost.Application do
       {Task.Supervisor, name: GameServer.TaskSupervisor},
       {DNSCluster, query: Application.get_env(:game_server_web, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: GameServer.PubSub},
+      # Apply cache invalidations broadcast by other instances
+      GameServer.Cache.Sync,
       GameServerWeb.ConnectionTracker,
+      # Load persisted IP bans and mirror ban events from other instances
+      GameServerWeb.IpBanSync,
       {GameServerWeb.RateLimit, clean_period: :timer.minutes(5)},
       GameServer.Lobbies.SpectatorTracker,
       GameServerWeb.AdminLogBuffer,

@@ -10,7 +10,7 @@ defmodule GameServer.OAuthSessions do
   @oauth_sessions_cache_ttl_ms 30_000
 
   defp invalidate_oauth_session_cache(session_id) when is_binary(session_id) do
-    _ = GameServer.Cache.delete({:oauth_sessions, :session, session_id})
+    _ = GameServer.Cache.invalidate({:oauth_sessions, :session, session_id})
     :ok
   end
 

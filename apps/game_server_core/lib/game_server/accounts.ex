@@ -27,8 +27,13 @@ defmodule GameServer.Accounts do
   @stats_cache_ttl_ms 60_000
   @users_count_cache_ttl_ms 60_000
 
+  # Upper bound on cross-node staleness for cached user structs: explicit
+  # invalidations propagate immediately via `GameServer.Cache.invalidate/1`,
+  # and this TTL caps staleness if an invalidation broadcast is ever missed.
+  @user_cache_ttl_ms 60_000
+
   defp users_stats_cache_version do
-    GameServer.Cache.get({:accounts, :users_stats_version}) || 1
+    GameServer.Cache.get!({:accounts, :users_stats_version}) || 1
   end
 
   defp invalidate_users_stats_cache do
@@ -115,12 +120,12 @@ defmodule GameServer.Accounts do
   end
 
   defp search_users_by_text(normalized_q, page, page_size) do
-    pattern = "#{normalized_q}%"
+    pattern = "#{Repo.escape_like(normalized_q)}%"
     offset = (page - 1) * page_size
 
     Repo.all(
       from u in User,
-        where: fragment("lower(?) LIKE ?", u.display_name, ^pattern),
+        where: fragment("lower(?) LIKE ? ESCAPE '\\'", u.display_name, ^pattern),
         limit: ^page_size,
         offset: ^offset
     )
@@ -159,11 +164,11 @@ defmodule GameServer.Accounts do
   end
 
   defp count_search_users_by_text(normalized_q) do
-    pattern = "#{normalized_q}%"
+    pattern = "#{Repo.escape_like(normalized_q)}%"
 
     Repo.one(
       from u in User,
-        where: fragment("lower(?) LIKE ?", u.display_name, ^pattern),
+        where: fragment("lower(?) LIKE ? ESCAPE '\\'", u.display_name, ^pattern),
         select: count(u.id)
     ) || 0
   end
@@ -177,7 +182,7 @@ defmodule GameServer.Accounts do
 
   defp invalidate_users_count_cache do
     GameServer.Async.run(fn ->
-      _ = GameServer.Cache.delete({:accounts, :users_count})
+      _ = GameServer.Cache.invalidate({:accounts, :users_count})
       :ok
     end)
 
@@ -403,16 +408,37 @@ defmodule GameServer.Accounts do
 
   """
   @spec get_user(integer()) :: User.t() | nil
-  @decorate cacheable(key: {:accounts, :user, id}, match: &cache_match/1)
+  @decorate cacheable(
+              key: {:accounts, :user, id},
+              match: &cache_match/1,
+              opts: [ttl: @user_cache_ttl_ms]
+            )
   def get_user(id), do: Repo.get(User, id)
 
   @decorate cacheable(
               key: {:accounts, :user_by, field, value},
               references: &(&1 && keyref({:accounts, :user, &1.id})),
-              match: &cache_match/1
+              match: &cache_match/1,
+              opts: [ttl: @user_cache_ttl_ms]
             )
   defp get_user_by_field(field, value) when is_atom(field) do
     Repo.get_by(User, [{field, value}])
+  end
+
+  @doc """
+  Stores `user` under the canonical user cache key (with the standard TTL).
+
+  Call after writes that update the user row outside this module (e.g. lobby
+  or party membership) so subsequent `get_user/1` reads stay warm and
+  consistent instead of serving the pre-write struct until the TTL expires.
+  """
+  @spec cache_user(User.t()) :: User.t()
+  def cache_user(%User{} = user) do
+    # Evict on all other instances first so their L1 refetches the fresh
+    # struct; the put re-warms this node and the shared L2.
+    _ = GameServer.Cache.invalidate({:accounts, :user, user.id})
+    _ = GameServer.Cache.put({:accounts, :user, user.id}, user, ttl: @user_cache_ttl_ms)
+    user
   end
 
   @spec cache_match(term()) :: boolean()
@@ -447,12 +473,12 @@ defmodule GameServer.Accounts do
   end
 
   defp invalidate_user_cache(%User{id: id} = user) do
-    _ = GameServer.Cache.delete({:accounts, :user, id})
+    _ = GameServer.Cache.invalidate({:accounts, :user, id})
 
     user
     |> user_index_keys()
     |> Enum.each(fn key ->
-      _ = GameServer.Cache.delete(key)
+      _ = GameServer.Cache.invalidate(key)
     end)
 
     :ok
@@ -466,7 +492,7 @@ defmodule GameServer.Accounts do
   def invalidate_user_cache_by_id(user_id) when is_integer(user_id) do
     case Repo.get(User, user_id) do
       %User{} = user -> invalidate_user_cache(user)
-      nil -> _ = GameServer.Cache.delete({:accounts, :user, user_id})
+      nil -> _ = GameServer.Cache.invalidate({:accounts, :user, user_id})
     end
 
     :ok
@@ -1571,7 +1597,7 @@ defmodule GameServer.Accounts do
   def delete_user_token(%UserToken{} = token) do
     case Repo.delete(token) do
       {:ok, _} = ok ->
-        _ = GameServer.Cache.delete({:accounts, :user_token, token.id})
+        _ = GameServer.Cache.invalidate({:accounts, :user_token, token.id})
         ok
 
       other ->
@@ -1619,7 +1645,7 @@ defmodule GameServer.Accounts do
       |> Repo.delete_all()
 
     Enum.each(token_ids, fn id ->
-      _ = GameServer.Cache.delete({:accounts, :user_token, id})
+      _ = GameServer.Cache.invalidate({:accounts, :user_token, id})
     end)
 
     result
@@ -1663,7 +1689,7 @@ defmodule GameServer.Accounts do
     fresh_user = Repo.get(User, user.id)
 
     if fresh_user && fresh_user.is_online do
-      _ = set_user_offline(fresh_user)
+      _ = set_user_offline(fresh_user.id)
     end
 
     case Repo.delete(user) do
@@ -1685,8 +1711,25 @@ defmodule GameServer.Accounts do
 
   ## Token helper
 
+  @doc """
+  Revokes every credential the user holds: all session tokens are deleted and
+  `token_version` is bumped, which invalidates all previously issued JWT
+  access and refresh tokens ("log out everywhere").
+
+  Returns `{:ok, {user, expired_tokens}}`.
+  """
+  @spec revoke_all_tokens(User.t()) ::
+          {:ok, {User.t(), [UserToken.t()]}} | {:error, Ecto.Changeset.t()}
+  def revoke_all_tokens(%User{} = user) do
+    user
+    |> Ecto.Changeset.change()
+    |> update_user_and_delete_all_tokens()
+  end
+
   defp update_user_and_delete_all_tokens(changeset) do
     Repo.transact(fn ->
+      changeset = bump_token_version(changeset)
+
       with {:ok, user} <- Repo.update(changeset) do
         invalidate_user_cache(user)
         tokens_to_expire = Repo.all_by(UserToken, user_id: user.id)
@@ -1696,6 +1739,14 @@ defmodule GameServer.Accounts do
         {:ok, {user, tokens_to_expire}}
       end
     end)
+  end
+
+  # Invalidates all previously issued JWTs: `GameServerWeb.Auth.Guardian`
+  # embeds `token_version` as a claim and rejects tokens whose claim no longer
+  # matches the user's current value.
+  defp bump_token_version(changeset) do
+    current = Ecto.Changeset.get_field(changeset, :token_version)
+    Ecto.Changeset.force_change(changeset, :token_version, current + 1)
   end
 
   @doc """
@@ -1961,9 +2012,7 @@ defmodule GameServer.Accounts do
   Mark a user as online and update last_seen_at.
   Returns {:ok, user} on success.
   """
-  @spec set_user_online(User.t() | integer()) :: {:ok, User.t()} | {:error, term()}
-  def set_user_online(%User{} = user), do: set_user_online(user.id)
-
+  @spec set_user_online(integer()) :: {:ok, User.t()} | {:error, term()}
   def set_user_online(user_id) when is_integer(user_id) do
     now = DateTime.utc_now(:second)
 
@@ -1996,9 +2045,7 @@ defmodule GameServer.Accounts do
   Mark a user as offline and update last_seen_at.
   Returns {:ok, user} on success.
   """
-  @spec set_user_offline(User.t() | integer()) :: {:ok, User.t()} | {:error, term()}
-  def set_user_offline(%User{} = user), do: set_user_offline(user.id)
-
+  @spec set_user_offline(integer()) :: {:ok, User.t()} | {:error, term()}
   def set_user_offline(user_id) when is_integer(user_id) do
     now = DateTime.utc_now(:second)
 

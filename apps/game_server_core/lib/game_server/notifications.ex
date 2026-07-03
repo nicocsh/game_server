@@ -73,7 +73,7 @@ defmodule GameServer.Notifications do
 
   @doc false
   defp notifications_version(user_id) do
-    GameServer.Cache.get({:notifications, :version, user_id}) || 1
+    GameServer.Cache.get!({:notifications, :version, user_id}) || 1
   end
 
   @doc false
@@ -309,17 +309,16 @@ defmodule GameServer.Notifications do
 
   defp maybe_filter_title(query, filters) do
     case Map.get(filters, "title") do
-      nil -> query
-      "" -> query
-      title -> where(query, [n], like(n.title, ^"%#{escape_like(title)}%"))
-    end
-  end
+      nil ->
+        query
 
-  defp escape_like(str) do
-    str
-    |> String.replace("\\", "\\\\")
-    |> String.replace("%", "\\%")
-    |> String.replace("_", "\\_")
+      "" ->
+        query
+
+      title ->
+        pattern = "%#{Repo.escape_like(title)}%"
+        where(query, [n], fragment("? LIKE ? ESCAPE '\\'", n.title, ^pattern))
+    end
   end
 
   defp parse_int(nil), do: nil

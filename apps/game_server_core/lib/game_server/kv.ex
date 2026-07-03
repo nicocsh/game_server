@@ -104,20 +104,20 @@ defmodule GameServer.KV do
     do: "kv:user_lobby:#{user_id}:#{lobby_id}:#{key}"
 
   defp entries_cache_version(:all) do
-    GameServer.Cache.get({:kv, :entries_version, :all}) || 1
+    GameServer.Cache.get!({:kv, :entries_version, :all}) || 1
   end
 
   defp entries_cache_version({:user, user_id}) when is_integer(user_id) do
-    GameServer.Cache.get({:kv, :entries_version, {:user, user_id}}) || 1
+    GameServer.Cache.get!({:kv, :entries_version, {:user, user_id}}) || 1
   end
 
   defp entries_cache_version({:lobby, lobby_id}) when is_integer(lobby_id) do
-    GameServer.Cache.get({:kv, :entries_version, {:lobby, lobby_id}}) || 1
+    GameServer.Cache.get!({:kv, :entries_version, {:lobby, lobby_id}}) || 1
   end
 
   defp entries_cache_version({:user_lobby, user_id, lobby_id})
        when is_integer(user_id) and is_integer(lobby_id) do
-    GameServer.Cache.get({:kv, :entries_version, {:user_lobby, user_id, lobby_id}}) || 1
+    GameServer.Cache.get!({:kv, :entries_version, {:user_lobby, user_id, lobby_id}}) || 1
   end
 
   defp scope_for_cache(nil, nil), do: :all
@@ -185,7 +185,7 @@ defmodule GameServer.KV do
     user_id = Keyword.get(opts, :user_id)
     lobby_id = Keyword.get(opts, :lobby_id)
 
-    cached = GameServer.Cache.get(cache_key(key, user_id, lobby_id))
+    cached = GameServer.Cache.get!(cache_key(key, user_id, lobby_id))
 
     if is_map(cached) and Map.has_key?(cached, :value) and Map.has_key?(cached, :metadata) do
       {:ok, cached}
@@ -302,7 +302,7 @@ defmodule GameServer.KV do
     user_id = Keyword.get(opts, :user_id)
     lobby_id = Keyword.get(opts, :lobby_id)
 
-    _ = GameServer.Cache.delete(cache_key(key, user_id, lobby_id))
+    _ = GameServer.Cache.invalidate(cache_key(key, user_id, lobby_id))
 
     _ = Repo.delete_all(entry_query(key, user_id, lobby_id))
     _ = invalidate_entries_cache(user_id, lobby_id)
@@ -333,7 +333,7 @@ defmodule GameServer.KV do
     cache_key =
       {:kv, :list_entries, version, user_id, lobby_id, global_only, key_filter, page, page_size}
 
-    case GameServer.Cache.get(cache_key) do
+    case GameServer.Cache.get!(cache_key) do
       entries when is_list(entries) ->
         entries
 
@@ -381,7 +381,7 @@ defmodule GameServer.KV do
 
     cache_key = {:kv, :count_entries, version, user_id, lobby_id, global_only, key_filter}
 
-    case GameServer.Cache.get(cache_key) do
+    case GameServer.Cache.get!(cache_key) do
       count when is_integer(count) ->
         count
 
@@ -498,7 +498,7 @@ defmodule GameServer.KV do
             {:ok, updated} ->
               if cache_key(updated.key, updated.user_id, updated.lobby_id) != old_cache_key do
                 GameServer.Async.run(fn ->
-                  _ = GameServer.Cache.delete(old_cache_key)
+                  _ = GameServer.Cache.invalidate(old_cache_key)
                   :ok
                 end)
               end
@@ -550,7 +550,7 @@ defmodule GameServer.KV do
         :ok
 
       %Entry{} = entry ->
-        _ = GameServer.Cache.delete(cache_key(entry.key, entry.user_id, entry.lobby_id))
+        _ = GameServer.Cache.invalidate(cache_key(entry.key, entry.user_id, entry.lobby_id))
 
         _ = Repo.delete(entry)
         _ = invalidate_entries_cache(entry.user_id, entry.lobby_id)
@@ -593,6 +593,11 @@ defmodule GameServer.KV do
 
   defp cache_put(key, user_id, lobby_id, %Entry{} = entry) do
     GameServer.Async.run(fn ->
+      # Evict the key on all other instances first so their L1 refetches the
+      # fresh value (from L2 or the DB) instead of serving the old one until
+      # the TTL expires. The put below re-warms this node and L2.
+      _ = GameServer.Cache.invalidate(cache_key(key, user_id, lobby_id))
+
       _ =
         GameServer.Cache.put(
           cache_key(key, user_id, lobby_id),
@@ -639,18 +644,11 @@ defmodule GameServer.KV do
   defp maybe_filter_key(query, nil), do: query
 
   defp maybe_filter_key(query, key_filter) when is_binary(key_filter) do
-    escaped = escape_like(key_filter)
+    pattern = "%#{Repo.escape_like(key_filter)}%"
 
     from(e in query,
-      where: like(fragment("lower(?)", e.key), ^"%#{escaped}%")
+      where: fragment("lower(?) LIKE ? ESCAPE '\\'", e.key, ^pattern)
     )
-  end
-
-  defp escape_like(str) do
-    str
-    |> String.replace("\\", "\\\\")
-    |> String.replace("%", "\\%")
-    |> String.replace("_", "\\_")
   end
 
   defp normalize_key_filter(nil), do: nil

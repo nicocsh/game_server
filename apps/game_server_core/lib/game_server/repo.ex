@@ -12,4 +12,21 @@ defmodule GameServer.Repo do
   use Ecto.Repo,
     otp_app: :game_server_core,
     adapter: @adapter
+
+  @doc ~S"""
+  Escapes `LIKE` wildcards (`%`, `_`) and the escape character (`\`) in
+  user-supplied search input so it matches literally.
+
+  Queries must pair the escaped pattern with an explicit escape clause,
+  because SQLite (unlike Postgres) has no default `LIKE` escape character:
+
+      fragment("? LIKE ? ESCAPE '\\'", u.name, ^("%" <> Repo.escape_like(term) <> "%"))
+  """
+  @spec escape_like(String.t()) :: String.t()
+  def escape_like(str) when is_binary(str) do
+    str
+    |> String.replace("\\", "\\\\")
+    |> String.replace("%", "\\%")
+    |> String.replace("_", "\\_")
+  end
 end

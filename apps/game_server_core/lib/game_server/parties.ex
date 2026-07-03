@@ -88,7 +88,7 @@ defmodule GameServer.Parties do
   @party_invite_cache_ttl_ms 60_000
 
   defp party_invite_cache_version(user_id) when is_integer(user_id) do
-    GameServer.Cache.get({:party_invites, :version, user_id}) || 1
+    GameServer.Cache.get!({:party_invites, :version, user_id}) || 1
   end
 
   defp invalidate_party_invite_cache(user_id) when is_integer(user_id) do
@@ -290,9 +290,8 @@ defmodule GameServer.Parties do
     end)
     |> case do
       {:ok, {party, updated_user}} ->
-        invalidate_user_cache(user.id)
         # Write the correct value to cache to prevent stale concurrent puts.
-        GameServer.Cache.put({:accounts, :user, updated_user.id}, updated_user)
+        Accounts.cache_user(updated_user)
         broadcast_parties({:party_created, party.id})
 
         GameServer.Async.run(fn ->
@@ -838,7 +837,7 @@ defmodule GameServer.Parties do
         # party_id=nil from DB before this commit) from overwriting our
         # delete.  A final invalidation in accept_party_invite closes the
         # remaining gap.
-        GameServer.Cache.put({:accounts, :user, updated_user.id}, updated_user)
+        Accounts.cache_user(updated_user)
 
         _ = Accounts.broadcast_user_update(updated_user)
         _ = Accounts.broadcast_member_update(updated_user)
@@ -1277,8 +1276,7 @@ defmodule GameServer.Parties do
         all_members = [user | non_leader_members]
 
         Enum.each(updated_members, fn updated ->
-          invalidate_user_cache(updated.id)
-          GameServer.Cache.put({:accounts, :user, updated.id}, updated)
+          Accounts.cache_user(updated)
         end)
 
         Enum.each(all_members, fn member ->
@@ -1400,8 +1398,7 @@ defmodule GameServer.Parties do
       {:ok, updated_members} ->
         # Post-commit: invalidate and write correct values to cache.
         Enum.each(updated_members, fn updated ->
-          invalidate_user_cache(updated.id)
-          GameServer.Cache.put({:accounts, :user, updated.id}, updated)
+          Accounts.cache_user(updated)
         end)
 
         # Broadcast events only after successful commit
@@ -1516,9 +1513,10 @@ defmodule GameServer.Parties do
   end
 
   defp invalidate_user_cache(user_id) when is_integer(user_id) do
-    # Synchronous delete — the client may join the party channel immediately
-    # after a party operation, so the cached user must already be cleared.
-    _ = GameServer.Cache.delete({:accounts, :user, user_id})
+    # Synchronous invalidation — the client may join the party channel
+    # immediately after a party operation (possibly via another app
+    # instance), so the cached user must already be cleared everywhere.
+    _ = GameServer.Cache.invalidate({:accounts, :user, user_id})
     :ok
   end
 

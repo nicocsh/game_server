@@ -1,0 +1,56 @@
+defmodule GameServer.CacheSyncTest do
+  # Writes to the shared L1 cache directly, so no async.
+  use ExUnit.Case, async: false
+
+  alias GameServer.Cache
+
+  # The app cache runs in bypass mode during tests (levels not started), so
+  # start the L1 level explicitly and exercise it directly — that is exactly
+  # what Cache.Sync operates on.
+  setup do
+    case start_supervised(Cache.L1) do
+      {:ok, _pid} -> :ok
+      {:error, {{:already_started, _pid}, _spec}} -> :ok
+    end
+
+    :ok
+  end
+
+  test "invalidate/1 broadcasts the key with the originating node" do
+    Phoenix.PubSub.subscribe(GameServer.PubSub, Cache.invalidation_topic())
+
+    assert :ok = Cache.invalidate({:test, :broadcast_key})
+
+    this_node = Node.self()
+    assert_receive {:cache_invalidate, {:test, :broadcast_key}, ^this_node}
+  end
+
+  test "an event from another node evicts the key from L1" do
+    Cache.L1.put({:test, :remote_key}, "value")
+    assert Cache.L1.get!({:test, :remote_key}) == "value"
+
+    send(
+      Process.whereis(GameServer.Cache.Sync),
+      {:cache_invalidate, {:test, :remote_key}, :"other@remote-host"}
+    )
+
+    # Synchronize with the GenServer so the message has been processed.
+    _ = :sys.get_state(GameServer.Cache.Sync)
+
+    assert Cache.L1.get!({:test, :remote_key}) == nil
+  end
+
+  test "an event from this node is skipped (already deleted locally)" do
+    Cache.L1.put({:test, :local_key}, "value")
+
+    send(
+      Process.whereis(GameServer.Cache.Sync),
+      {:cache_invalidate, {:test, :local_key}, Node.self()}
+    )
+
+    _ = :sys.get_state(GameServer.Cache.Sync)
+
+    assert Cache.L1.get!({:test, :local_key}) == "value"
+    Cache.L1.delete({:test, :local_key})
+  end
+end

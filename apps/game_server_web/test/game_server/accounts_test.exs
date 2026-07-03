@@ -337,6 +337,31 @@ defmodule GameServer.AccountsTest do
 
       refute Repo.get_by(UserToken, user_id: user.id)
     end
+
+    test "bumps token_version to revoke issued JWTs", %{user: user} do
+      {:ok, {updated, _}} =
+        Accounts.update_user_password(user, %{
+          password: "new valid password"
+        })
+
+      assert updated.token_version == user.token_version + 1
+    end
+  end
+
+  describe "revoke_all_tokens/1" do
+    setup do
+      %{user: user_fixture()}
+    end
+
+    test "deletes session tokens and bumps token_version", %{user: user} do
+      _ = Accounts.generate_user_session_token(user)
+
+      {:ok, {updated, expired_tokens}} = Accounts.revoke_all_tokens(user)
+
+      assert length(expired_tokens) == 1
+      refute Repo.get_by(UserToken, user_id: user.id)
+      assert updated.token_version == user.token_version + 1
+    end
   end
 
   describe "generate_user_session_token/1" do
@@ -544,6 +569,15 @@ defmodule GameServer.AccountsTest do
       results = Accounts.search_users("alpha")
       assert results != []
       assert Enum.any?(results, &(&1.id == user.id))
+    end
+
+    test "treats LIKE wildcards in the query literally" do
+      user = user_fixture()
+      {:ok, _} = Accounts.update_user_display_name(user, %{"display_name" => "WildcardName"})
+
+      # "%" and "_" must not act as wildcards
+      refute Enum.any?(Accounts.search_users("%"), &(&1.id == user.id))
+      refute Enum.any?(Accounts.search_users("_ildcard"), &(&1.id == user.id))
     end
 
     test "does not find user by email prefix" do

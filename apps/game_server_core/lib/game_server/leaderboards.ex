@@ -38,15 +38,15 @@ defmodule GameServer.Leaderboards do
   @records_cache_ttl_ms 10_000
 
   defp leaderboards_cache_version do
-    GameServer.Cache.get({:leaderboards, :version}) || 1
+    GameServer.Cache.get!({:leaderboards, :version}) || 1
   end
 
   defp records_cache_version(leaderboard_id) when is_integer(leaderboard_id) do
-    GameServer.Cache.get({:leaderboards, :records_version, leaderboard_id}) || 1
+    GameServer.Cache.get!({:leaderboards, :records_version, leaderboard_id}) || 1
   end
 
   defp record_cache_version(record_id) when is_integer(record_id) do
-    GameServer.Cache.get({:leaderboards, :record_version, record_id}) || 1
+    GameServer.Cache.get!({:leaderboards, :record_version, record_id}) || 1
   end
 
   defp invalidate_leaderboards_cache do

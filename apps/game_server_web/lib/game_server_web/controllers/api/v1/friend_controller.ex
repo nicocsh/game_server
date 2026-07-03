@@ -429,10 +429,10 @@ defmodule GameServerWeb.Api.V1.FriendController do
         {page, page_size} = parse_page_params(params)
 
         # include the friendship row id so clients can call delete/accept/reject by id
-        friends = Friends.list_friends_with_friendship(user, page: page, page_size: page_size)
+        friends = Friends.list_friends_with_friendship(user.id, page: page, page_size: page_size)
         serialized = Enum.map(friends, &serialize_friend/1)
         count = length(serialized)
-        total_count = Friends.count_friends_for_user(user)
+        total_count = Friends.count_friends_for_user(user.id)
 
         json(conn, %{
           data: serialized,
@@ -449,13 +449,13 @@ defmodule GameServerWeb.Api.V1.FriendController do
       %{user: user} when user != nil ->
         {page, page_size} = parse_page_params(params)
 
-        blocked = Friends.list_blocked_for_user(user, page: page, page_size: page_size)
+        blocked = Friends.list_blocked_for_user(user.id, page: page, page_size: page_size)
 
         serialized =
           Enum.map(blocked, fn f -> %{id: f.id, requester: serialize_user(f.requester)} end)
 
         count = length(serialized)
-        total_count = Friends.count_blocked_for_user(user)
+        total_count = Friends.count_blocked_for_user(user.id)
 
         json(conn, %{
           data: serialized,
@@ -500,14 +500,14 @@ defmodule GameServerWeb.Api.V1.FriendController do
       %{user: user} when user != nil ->
         {page, page_size} = parse_page_params(params)
 
-        incoming = Friends.list_incoming_requests(user, page: page, page_size: page_size)
-        outgoing = Friends.list_outgoing_requests(user, page: page, page_size: page_size)
+        incoming = Friends.list_incoming_requests(user.id, page: page, page_size: page_size)
+        outgoing = Friends.list_outgoing_requests(user.id, page: page, page_size: page_size)
 
         inc_serialized = Enum.map(incoming, &serialize_request/1)
         out_serialized = Enum.map(outgoing, &serialize_request/1)
 
-        total_in = Friends.count_incoming_requests(user)
-        total_out = Friends.count_outgoing_requests(user)
+        total_in = Friends.count_incoming_requests(user.id)
+        total_out = Friends.count_outgoing_requests(user.id)
 
         total_pages_in = if page_size > 0, do: div(total_in + page_size - 1, page_size), else: 0
         total_pages_out = if page_size > 0, do: div(total_out + page_size - 1, page_size), else: 0

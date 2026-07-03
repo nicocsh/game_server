@@ -43,7 +43,7 @@ defmodule GameServer.Friends do
   @type user_id :: integer()
 
   defp friends_cache_version(user_id) when is_integer(user_id) do
-    GameServer.Cache.get({:friends, :version, user_id}) || 1
+    GameServer.Cache.get!({:friends, :version, user_id}) || 1
   end
 
   defp invalidate_friends_cache(user_id) when is_integer(user_id) do
@@ -58,7 +58,7 @@ defmodule GameServer.Friends do
   end
 
   defp friendship_cache_version(friendship_id) when is_integer(friendship_id) do
-    GameServer.Cache.get({:friends, :friendship_version, friendship_id}) || 1
+    GameServer.Cache.get!({:friends, :friendship_version, friendship_id}) || 1
   end
 
   defp invalidate_friendship_cache(friendship_id) when is_integer(friendship_id) do
@@ -414,10 +414,9 @@ defmodule GameServer.Friends do
   end
 
   @doc "List blocked friendships for a user (Friendship structs where the user is the blocker / target)."
-  @spec list_blocked_for_user(user_id() | User.t()) :: [Friendship.t()]
-  @spec list_blocked_for_user(user_id() | User.t(), Types.pagination_opts()) :: [Friendship.t()]
+  @spec list_blocked_for_user(user_id()) :: [Friendship.t()]
+  @spec list_blocked_for_user(user_id(), Types.pagination_opts()) :: [Friendship.t()]
   def list_blocked_for_user(user_id, opts \\ [])
-  def list_blocked_for_user(%User{id: id}, opts), do: list_blocked_for_user(id, opts)
 
   def list_blocked_for_user(user_id, opts) when is_integer(user_id) do
     page = Keyword.get(opts, :page, 1)
@@ -439,8 +438,7 @@ defmodule GameServer.Friends do
   end
 
   @doc "Count blocked friendships for a user (number of blocked rows where user is target)."
-  @spec count_blocked_for_user(user_id() | User.t()) :: non_neg_integer()
-  def count_blocked_for_user(%User{id: id}), do: count_blocked_for_user(id)
+  @spec count_blocked_for_user(user_id()) :: non_neg_integer()
 
   def count_blocked_for_user(user_id) when is_integer(user_id) do
     count_blocked_for_user_uncached(user_id)
@@ -484,10 +482,9 @@ defmodule GameServer.Friends do
 
   See `t:GameServer.Types.pagination_opts/0` for available options.
   """
-  @spec list_friends_for_user(integer() | User.t()) :: [User.t()]
-  @spec list_friends_for_user(integer() | User.t(), Types.pagination_opts()) :: [User.t()]
+  @spec list_friends_for_user(integer()) :: [User.t()]
+  @spec list_friends_for_user(integer(), Types.pagination_opts()) :: [User.t()]
   def list_friends_for_user(user_id, opts \\ [])
-  def list_friends_for_user(%User{id: id}, opts), do: list_friends_for_user(id, opts)
 
   def list_friends_for_user(user_id, opts) when is_integer(user_id) do
     page = Keyword.get(opts, :page, 1)
@@ -529,16 +526,13 @@ defmodule GameServer.Friends do
 
   Returns a list of maps: %{friendship_id: integer(), user: %User{}}
   """
-  @spec list_friends_with_friendship(integer() | User.t()) :: [
+  @spec list_friends_with_friendship(integer()) :: [
           %{friendship_id: integer(), user: User.t()}
         ]
-  @spec list_friends_with_friendship(integer() | User.t(), Types.pagination_opts()) :: [
+  @spec list_friends_with_friendship(integer(), Types.pagination_opts()) :: [
           %{friendship_id: integer(), user: User.t()}
         ]
   def list_friends_with_friendship(user_id, opts \\ [])
-
-  def list_friends_with_friendship(%User{id: id}, opts),
-    do: list_friends_with_friendship(id, opts)
 
   def list_friends_with_friendship(user_id, opts) when is_integer(user_id) do
     page = Keyword.get(opts, :page, 1)
@@ -568,8 +562,7 @@ defmodule GameServer.Friends do
   end
 
   @doc "Count accepted friends for a given user (distinct other user ids)."
-  @spec count_friends_for_user(user_id() | User.t()) :: non_neg_integer()
-  def count_friends_for_user(%User{id: id}), do: count_friends_for_user(id)
+  @spec count_friends_for_user(user_id()) :: non_neg_integer()
 
   def count_friends_for_user(user_id) when is_integer(user_id) do
     count_friends_for_user_uncached(user_id)
@@ -598,10 +591,9 @@ defmodule GameServer.Friends do
 
   See `t:GameServer.Types.pagination_opts/0` for available options.
   """
-  @spec list_incoming_requests(integer() | User.t()) :: [Friendship.t()]
-  @spec list_incoming_requests(integer() | User.t(), Types.pagination_opts()) :: [Friendship.t()]
+  @spec list_incoming_requests(integer()) :: [Friendship.t()]
+  @spec list_incoming_requests(integer(), Types.pagination_opts()) :: [Friendship.t()]
   def list_incoming_requests(user_id, opts \\ [])
-  def list_incoming_requests(%User{id: id}, opts), do: list_incoming_requests(id, opts)
 
   def list_incoming_requests(user_id, opts) when is_integer(user_id) do
     page = Keyword.get(opts, :page, 1)
@@ -623,8 +615,7 @@ defmodule GameServer.Friends do
   end
 
   @doc "Count incoming pending friend requests for a user."
-  @spec count_incoming_requests(user_id() | User.t()) :: non_neg_integer()
-  def count_incoming_requests(%User{id: id}), do: count_incoming_requests(id)
+  @spec count_incoming_requests(user_id()) :: non_neg_integer()
 
   def count_incoming_requests(user_id) when is_integer(user_id) do
     count_incoming_requests_uncached(user_id)
@@ -645,10 +636,9 @@ defmodule GameServer.Friends do
 
   See `t:GameServer.Types.pagination_opts/0` for available options.
   """
-  @spec list_outgoing_requests(integer() | User.t()) :: [Friendship.t()]
-  @spec list_outgoing_requests(integer() | User.t(), Types.pagination_opts()) :: [Friendship.t()]
+  @spec list_outgoing_requests(integer()) :: [Friendship.t()]
+  @spec list_outgoing_requests(integer(), Types.pagination_opts()) :: [Friendship.t()]
   def list_outgoing_requests(user_id, opts \\ [])
-  def list_outgoing_requests(%User{id: id}, opts), do: list_outgoing_requests(id, opts)
 
   def list_outgoing_requests(user_id, opts) when is_integer(user_id) do
     page = Keyword.get(opts, :page, 1)
@@ -670,8 +660,7 @@ defmodule GameServer.Friends do
   end
 
   @doc "Count outgoing pending friend requests for a user."
-  @spec count_outgoing_requests(user_id() | User.t()) :: non_neg_integer()
-  def count_outgoing_requests(%User{id: id}), do: count_outgoing_requests(id)
+  @spec count_outgoing_requests(user_id()) :: non_neg_integer()
 
   def count_outgoing_requests(user_id) when is_integer(user_id) do
     count_outgoing_requests_uncached(user_id)

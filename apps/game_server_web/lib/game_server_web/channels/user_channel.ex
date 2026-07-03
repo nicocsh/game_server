@@ -282,7 +282,7 @@ defmodule GameServerWeb.UserChannel do
   def handle_info({:after_join, %User{} = user}, socket) do
     # Mark user online in DB
     socket =
-      case Accounts.set_user_online(user) do
+      case Accounts.set_user_online(user.id) do
         {:ok, updated_user} ->
           payload = Accounts.serialize_user_payload(updated_user)
           push(socket, "updated", payload)

@@ -20,14 +20,14 @@ defmodule GameServer.FriendsTest do
       assert {:ok, accepted} = Friends.accept_friend_request(f.id, b)
       assert accepted.status == "accepted"
 
-      friends_a = Friends.list_friends_for_user(a)
-      friends_b = Friends.list_friends_for_user(b)
+      friends_a = Friends.list_friends_for_user(a.id)
+      friends_b = Friends.list_friends_for_user(b.id)
 
       assert Enum.any?(friends_a, &(&1.id == b.id))
       assert Enum.any?(friends_b, &(&1.id == a.id))
       # count helper should reflect 1 friend for each
-      assert Friends.count_friends_for_user(a) == 1
-      assert Friends.count_friends_for_user(b) == 1
+      assert Friends.count_friends_for_user(a.id) == 1
+      assert Friends.count_friends_for_user(b.id) == 1
     end
 
     test "cannot friend yourself", %{a: a} do
@@ -47,7 +47,7 @@ defmodule GameServer.FriendsTest do
       # b -> a should accept the existing pending request
       {:ok, accepted} = Friends.create_request(b.id, a.id)
       assert accepted.status == "accepted"
-      assert Enum.any?(Friends.list_friends_for_user(a), &(&1.id == b.id))
+      assert Enum.any?(Friends.list_friends_for_user(a.id), &(&1.id == b.id))
     end
 
     test "reject and cancel flows", %{a: a, b: b} do
@@ -57,7 +57,7 @@ defmodule GameServer.FriendsTest do
       {:ok, _} = Friends.reject_friend_request(f.id, b)
 
       # now no friends
-      refute Enum.any?(Friends.list_friends_for_user(a), &(&1.id == b.id))
+      refute Enum.any?(Friends.list_friends_for_user(a.id), &(&1.id == b.id))
 
       # new request then canceled
       {:ok, f2} = Friends.create_request(a.id, b.id)
@@ -70,7 +70,7 @@ defmodule GameServer.FriendsTest do
 
       # remove friend by user a
       assert {:ok, _} = Friends.remove_friend(a.id, b.id)
-      refute Enum.any?(Friends.list_friends_for_user(a), &(&1.id == b.id))
+      refute Enum.any?(Friends.list_friends_for_user(a.id), &(&1.id == b.id))
     end
   end
 
@@ -94,7 +94,7 @@ defmodule GameServer.FriendsTest do
       assert blocked.status == "blocked"
 
       # list blocked for b should include the blocked friendship
-      blocked_list = Friends.list_blocked_for_user(b)
+      blocked_list = Friends.list_blocked_for_user(b.id)
       assert Enum.any?(blocked_list, &(&1.id == blocked.id))
 
       # should receive broadcasts on the subscribed topics

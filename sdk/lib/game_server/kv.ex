@@ -303,6 +303,44 @@ defmodule GameServer.KV do
 
 
   @doc ~S"""
+    Subscribe the current process to changes for a specific key/scope.
+    
+  """
+  @spec subscribe(
+  String.t(),
+  keyword()
+) :: :ok | {:error, term()}
+  def subscribe(_key, _opts) do
+    case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
+      :placeholder ->
+        :ok
+
+      _ ->
+        raise "GameServer.KV.subscribe/2 is a stub - only available at runtime on GameServer"
+    end
+  end
+
+
+  @doc ~S"""
+    Unsubscribe the current process from changes for a specific key/scope.
+    
+  """
+  @spec unsubscribe(
+  String.t(),
+  keyword()
+) :: :ok | {:error, term()}
+  def unsubscribe(_key, _opts) do
+    case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
+      :placeholder ->
+        :ok
+
+      _ ->
+        raise "GameServer.KV.unsubscribe/2 is a stub - only available at runtime on GameServer"
+    end
+  end
+
+
+  @doc ~S"""
     Update an existing entry by `id` with `attrs`.
     Returns `{:ok, entry}`, `{:error, :not_found}` if missing, or `{:error, changeset}` on validation error.
     

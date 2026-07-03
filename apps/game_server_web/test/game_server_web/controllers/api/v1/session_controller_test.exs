@@ -169,6 +169,49 @@ defmodule GameServerWeb.Api.V1.SessionControllerTest do
 
       assert %{"error" => "refresh_token is required"} = json_response(conn, 400)
     end
+
+    test "returns 401 after a password change revokes the refresh token", %{
+      conn: conn,
+      user: user
+    } do
+      conn =
+        post(conn, "/api/v1/login", %{
+          email: @valid_email,
+          password: @valid_password
+        })
+
+      %{"data" => %{"refresh_token" => refresh_token}} = json_response(conn, 200)
+
+      {:ok, {_user, _tokens}} =
+        GameServer.Accounts.update_user_password(user, %{password: "brand new password!"})
+
+      conn = build_conn()
+      conn = post(conn, "/api/v1/refresh", %{refresh_token: refresh_token})
+
+      assert %{"error" => _} = json_response(conn, 401)
+    end
+
+    test "access token stops working after revoke_all_tokens/1", %{conn: conn, user: user} do
+      conn =
+        post(conn, "/api/v1/login", %{
+          email: @valid_email,
+          password: @valid_password
+        })
+
+      %{"data" => %{"access_token" => access_token}} = json_response(conn, 200)
+
+      authed = fn ->
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{access_token}")
+        |> get("/api/v1/me")
+      end
+
+      assert json_response(authed.(), 200)
+
+      {:ok, {_user, _tokens}} = GameServer.Accounts.revoke_all_tokens(user)
+
+      assert json_response(authed.(), 401)
+    end
   end
 
   describe "DELETE /api/v1/logout" do

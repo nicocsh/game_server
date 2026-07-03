@@ -457,6 +457,29 @@ if config_env() == :prod do
 
   config :game_server_web, GameServerWeb.Plugs.RateLimiter, rate_limit_opts
 
+  # Rate limiter backend: "ets" (default, per-node) or "redis" (shared across
+  # instances — recommended for multi-instance deployments).
+  rate_limit_redis_url =
+    System.get_env("RATE_LIMIT_REDIS_URL") || System.get_env("CACHE_REDIS_URL") ||
+      System.get_env("REDIS_URL")
+
+  rate_limit_backend =
+    case System.get_env("RATE_LIMIT_BACKEND", "ets") do
+      "redis" ->
+        if rate_limit_redis_url in [nil, ""] do
+          raise "RATE_LIMIT_BACKEND=redis requires RATE_LIMIT_REDIS_URL, CACHE_REDIS_URL, or REDIS_URL"
+        end
+
+        :redis
+
+      _ ->
+        :ets
+    end
+
+  config :game_server_web, GameServerWeb.RateLimit,
+    backend: rate_limit_backend,
+    redis: [url: rate_limit_redis_url]
+
   endpoint_config =
     [
       url: [host: host, port: if(scheme == "https", do: 443, else: port), scheme: scheme],

@@ -39,7 +39,7 @@ defmodule GameServer.Achievements do
   @achievements_cache_ttl_ms 60_000
 
   defp achievements_version do
-    GameServer.Cache.get({:achievements, :version}) || 1
+    GameServer.Cache.get!({:achievements, :version}) || 1
   end
 
   defp invalidate_achievements_cache do

@@ -1619,36 +1619,36 @@ defmodule GameServerWeb.UserLive.Settings do
       |> assign(:conflict_provider, nil)
       |> assign(:incoming_page, 1)
       |> assign(:incoming_page_size, 25)
-      |> assign(:incoming_total, Friends.count_incoming_requests(user))
+      |> assign(:incoming_total, Friends.count_incoming_requests(user.id))
       |> assign(
         :incoming_total_pages,
-        if(25 > 0, do: div(Friends.count_incoming_requests(user) + 25 - 1, 25), else: 0)
+        if(25 > 0, do: div(Friends.count_incoming_requests(user.id) + 25 - 1, 25), else: 0)
       )
       |> assign(:outgoing_page, 1)
       |> assign(:outgoing_page_size, 25)
-      |> assign(:outgoing_total, Friends.count_outgoing_requests(user))
+      |> assign(:outgoing_total, Friends.count_outgoing_requests(user.id))
       |> assign(
         :outgoing_total_pages,
-        if(25 > 0, do: div(Friends.count_outgoing_requests(user) + 25 - 1, 25), else: 0)
+        if(25 > 0, do: div(Friends.count_outgoing_requests(user.id) + 25 - 1, 25), else: 0)
       )
       |> assign(:friends_page, 1)
       |> assign(:friends_page_size, 25)
-      |> assign(:friends_total, Friends.count_friends_for_user(user))
+      |> assign(:friends_total, Friends.count_friends_for_user(user.id))
       |> assign(
         :friends_total_pages,
-        if(25 > 0, do: div(Friends.count_friends_for_user(user) + 25 - 1, 25), else: 0)
+        if(25 > 0, do: div(Friends.count_friends_for_user(user.id) + 25 - 1, 25), else: 0)
       )
       |> assign(:blocked_page, 1)
       |> assign(:blocked_page_size, 25)
-      |> assign(:blocked_total, Friends.count_blocked_for_user(user))
+      |> assign(:blocked_total, Friends.count_blocked_for_user(user.id))
       |> assign(
         :blocked_total_pages,
-        if(25 > 0, do: div(Friends.count_blocked_for_user(user) + 25 - 1, 25), else: 0)
+        if(25 > 0, do: div(Friends.count_blocked_for_user(user.id) + 25 - 1, 25), else: 0)
       )
-      |> assign(:incoming, Friends.list_incoming_requests(user, page: 1, page_size: 25))
-      |> assign(:outgoing, Friends.list_outgoing_requests(user, page: 1, page_size: 25))
-      |> assign(:friends, Friends.list_friends_for_user(user, page: 1, page_size: 25))
-      |> assign(:blocked, Friends.list_blocked_for_user(user, page: 1, page_size: 25))
+      |> assign(:incoming, Friends.list_incoming_requests(user.id, page: 1, page_size: 25))
+      |> assign(:outgoing, Friends.list_outgoing_requests(user.id, page: 1, page_size: 25))
+      |> assign(:friends, Friends.list_friends_for_user(user.id, page: 1, page_size: 25))
+      |> assign(:blocked, Friends.list_blocked_for_user(user.id, page: 1, page_size: 25))
       |> assign(:new_target_id, "")
       |> assign(:search_query, "")
       |> assign(:search_results, [])
@@ -2611,21 +2611,21 @@ defmodule GameServerWeb.UserLive.Settings do
     blocked_page_size = socket.assigns.blocked_page_size || 25
 
     incoming =
-      Friends.list_incoming_requests(user, page: incoming_page, page_size: incoming_page_size)
+      Friends.list_incoming_requests(user.id, page: incoming_page, page_size: incoming_page_size)
 
     outgoing =
-      Friends.list_outgoing_requests(user, page: outgoing_page, page_size: outgoing_page_size)
+      Friends.list_outgoing_requests(user.id, page: outgoing_page, page_size: outgoing_page_size)
 
     friends =
-      Friends.list_friends_for_user(user, page: friends_page, page_size: friends_page_size)
+      Friends.list_friends_for_user(user.id, page: friends_page, page_size: friends_page_size)
 
     blocked =
-      Friends.list_blocked_for_user(user, page: blocked_page, page_size: blocked_page_size)
+      Friends.list_blocked_for_user(user.id, page: blocked_page, page_size: blocked_page_size)
 
-    incoming_total = Friends.count_incoming_requests(user)
-    outgoing_total = Friends.count_outgoing_requests(user)
-    friends_total = Friends.count_friends_for_user(user)
-    blocked_total = Friends.count_blocked_for_user(user)
+    incoming_total = Friends.count_incoming_requests(user.id)
+    outgoing_total = Friends.count_outgoing_requests(user.id)
+    friends_total = Friends.count_friends_for_user(user.id)
+    blocked_total = Friends.count_blocked_for_user(user.id)
 
     incoming_total_pages =
       if incoming_page_size > 0,
@@ -2917,7 +2917,10 @@ defmodule GameServerWeb.UserLive.Settings do
     do:
       {:noreply,
        refresh_friend_lists(socket, get_user_from_scope(socket.assigns))
-       |> assign(:blocked, Friends.list_blocked_for_user(get_user_from_scope(socket.assigns)))}
+       |> assign(
+         :blocked,
+         Friends.list_blocked_for_user(get_user_from_scope(socket.assigns).id)
+       )}
 
   # Online status change broadcast from UserChannel (via PubSub on "user:<id>")
   def handle_info(

@@ -693,11 +693,11 @@ defmodule GameServerWeb.AdminLive.Payments do
   @impl true
   def handle_event("reconcile_stripe_purchase", %{"id" => id}, socket) do
     result =
-      id
-      |> parse_int()
-      |> case do
-        nil -> {:error, :purchase_not_found}
-        purchase_id -> Payments.reconcile_stripe_purchase(purchase_id)
+      with purchase_id when is_integer(purchase_id) <- parse_int(id),
+           %Payments.Purchase{} = purchase <- Payments.get_purchase(purchase_id) do
+        Payments.reconcile_stripe_purchase(purchase)
+      else
+        _ -> {:error, :purchase_not_found}
       end
 
     case result do

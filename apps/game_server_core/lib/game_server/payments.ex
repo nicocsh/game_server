@@ -120,10 +120,9 @@ defmodule GameServer.Payments do
   # Purchases and fulfillment
   # ---------------------------------------------------------------------------
 
-  @spec create_purchase(User.t() | integer(), ProviderProduct.t(), map()) ::
+  @spec create_purchase(User.t(), ProviderProduct.t(), map()) ::
           {:ok, Purchase.t()} | {:error, Ecto.Changeset.t()}
-  def create_purchase(user_or_id, %ProviderProduct{} = provider_product, attrs \\ %{}) do
-    user_id = user_id(user_or_id)
+  def create_purchase(%User{id: user_id}, %ProviderProduct{} = provider_product, attrs \\ %{}) do
     provider_product = Repo.preload(provider_product, :product)
     attrs = normalize_params(attrs)
     quantity = parse_positive_int(attrs["quantity"], 1)
@@ -346,16 +345,9 @@ defmodule GameServer.Payments do
     end
   end
 
-  @spec reconcile_stripe_purchase(Purchase.t() | integer()) ::
+  @spec reconcile_stripe_purchase(Purchase.t()) ::
           {:ok, %{purchase: Purchase.t(), result: atom(), stripe_session: map()}}
           | {:error, term()}
-  def reconcile_stripe_purchase(id) when is_integer(id) do
-    case get_purchase(id) do
-      %Purchase{} = purchase -> reconcile_stripe_purchase(purchase)
-      nil -> {:error, :purchase_not_found}
-    end
-  end
-
   def reconcile_stripe_purchase(
         %Purchase{
           provider: "stripe",
@@ -1989,8 +1981,8 @@ defmodule GameServer.Payments do
   defp maybe_where_like(query, _field, value) when value in [nil, ""], do: query
 
   defp maybe_where_like(query, field, value) when is_binary(value) do
-    pattern = "%#{value}%"
-    where(query, [row], like(field(row, ^field), ^pattern))
+    pattern = "%#{Repo.escape_like(value)}%"
+    where(query, [row], fragment("? LIKE ? ESCAPE '\\'", field(row, ^field), ^pattern))
   end
 
   defp present?(value), do: is_binary(value) and value != ""
@@ -2023,9 +2015,6 @@ defmodule GameServer.Payments do
   end
 
   defp entitlement_expiry(_product), do: nil
-
-  defp user_id(%User{id: id}), do: id
-  defp user_id(id) when is_integer(id), do: id
 
   defp total_amount(nil, _quantity), do: nil
 

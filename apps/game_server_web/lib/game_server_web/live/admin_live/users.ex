@@ -1030,18 +1030,18 @@ defmodule GameServerWeb.AdminLive.Users do
         from u in base, where: ^final_query
 
       true ->
-        q = "%#{search_term}%"
+        q = "%#{GameServer.Repo.escape_like(search_term)}%"
 
         from u in base,
           where:
-            fragment("LOWER(?) LIKE LOWER(?)", u.email, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.display_name, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.device_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.google_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.apple_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.facebook_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.steam_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.discord_id, ^q)
+            fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.email, ^q) or
+              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.display_name, ^q) or
+              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.device_id, ^q) or
+              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.google_id, ^q) or
+              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.apple_id, ^q) or
+              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.facebook_id, ^q) or
+              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.steam_id, ^q) or
+              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.discord_id, ^q)
     end
   end
 

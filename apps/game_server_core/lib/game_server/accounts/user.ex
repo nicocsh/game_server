@@ -43,6 +43,7 @@ defmodule GameServer.Accounts.User do
     field :metadata, :map, default: %{}
     field :is_online, :boolean, default: false
     field :last_seen_at, :utc_datetime
+    field :token_version, :integer, default: 0
 
     # membership via users.lobby_id (each user can be in one lobby)
     belongs_to :lobby, GameServer.Lobbies.Lobby

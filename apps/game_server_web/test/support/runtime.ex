@@ -27,6 +27,7 @@ defmodule GameServerWeb.TestSupport.Runtime do
       {GameServer.Cache, []},
       {Task.Supervisor, name: GameServer.TaskSupervisor},
       {Phoenix.PubSub, name: GameServer.PubSub},
+      GameServer.Cache.Sync,
       GameServerWeb.ConnectionTracker,
       {GameServerWeb.RateLimit, clean_period: :timer.minutes(5)},
       GameServer.Lobbies.SpectatorTracker,

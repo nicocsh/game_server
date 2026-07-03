@@ -137,14 +137,13 @@ Controllers automatically have the `current_scope` available if they use the `:b
 
 API routes use JWT tokens via Guardian for stateless authentication:
 
-- API login endpoint (`POST /api/v1/login`) returns a JWT token
+- API login endpoint (`POST /api/v1/login`) returns an access token (15 minutes) and a refresh token (30 days); `POST /api/v1/refresh` exchanges a valid refresh token for a new access token
 - OAuth API endpoints also return JWT tokens
 - Protected API routes use the `:api_auth` pipeline which:
   - Verifies JWT tokens from `Authorization: Bearer <token>` header
   - Loads the user and assigns `current_scope` to the connection
   - Returns 401 errors for invalid/missing tokens
-- JWT tokens are valid for 7 days by default (configurable in config files)
-- Tokens are stateless - no database lookup on verification (only signature check)
+- Verification loads the user from the database and compares the token's `"tv"` claim against `users.token_version` — bumping the version (password change, email change, `Accounts.revoke_all_tokens/1`) revokes all previously issued access and refresh tokens
 - **Always** use the `:api_auth` pipeline for API routes that require authentication:
 
       scope "/api/v1", GameServerWeb.Api.V1, as: :api_v1 do
@@ -154,8 +153,8 @@ API routes use JWT tokens via Guardian for stateless authentication:
       end
 
 - In API controllers, access the authenticated user via `conn.assigns.current_scope.user` (Guardian pipeline sets this)
-- Guardian implementation is in `lib/game_server_web/auth/guardian.ex`
-- Guardian pipeline is in `lib/game_server_web/auth/pipeline.ex`
+- Guardian implementation is in `apps/game_server_web/lib/game_server_web/auth/guardian.ex`
+- Guardian pipeline is in `apps/game_server_web/lib/game_server_web/auth/pipeline.ex`
 
 ### User hooks
 
@@ -297,6 +296,13 @@ API routes use JWT tokens via Guardian for stateless authentication:
 - **Config**: `config :game_server_web, :webrtc, enabled: true, ice_servers: [%{urls: "stun:stun.l.google.com:19302"}]`
 - **Client helpers**: `assets/js/webrtc.js` (browser), `clients/gamend_template/GamendWebRTC.gd` (Godot)
 - **Design document**: `docs/webrtc-design.md`
+
+### Caching conventions
+
+- App cache is `GameServer.Cache` (Nebulex 3, multilevel: local L1 + optional Redis/partitioned L2). **Nebulex 3 returns `{:ok, value}` tuples** — use `GameServer.Cache.get!/1` (raw value, `nil` on miss) or `fetch/1`, never bare `get/1` compared against raw values.
+- Read caching uses **version keys**: cache keys embed a `*_cache_version(...)` counter read via `get!(...) || 1`; invalidation = `incr` the counter. Data entries must carry a TTL (typically 60s) — that TTL is the cross-instance staleness bound.
+- When a stale read would be *incorrect* (not merely briefly outdated) — cached users gating auth, sessions, tokens, KV values — invalidate with `GameServer.Cache.invalidate/1` (delete + PubSub broadcast; `GameServer.Cache.Sync` evicts the key from other instances' L1) instead of `delete/1`.
+- Cache user structs only via `Accounts.cache_user/1`; never `Cache.put` the `{:accounts, :user, id}` key directly.
 
 ### Advisory locks
 
@@ -640,7 +646,7 @@ When adding a new feature or domain resource, evaluate which of the following ne
 - [ ] **API controller** (`apps/game_server_web/lib/game_server_web/controllers/api/v1/`): REST endpoints
 - [ ] **OpenApiSpex** (inline `operation/2` macros in the controller): document request/response schemas. The spec is generated at runtime from code — no standalone YAML/JSON file
 - [ ] **API JSON view/serialization**: ensure response shapes follow pagination convention when listing (`data` + `meta`)
-- [ ] **Router** (`apps/game_server_web/lib/game_server_web/router.ex`): add routes in the appropriate scope (`:api` public or `:api_auth` authenticated or `:api_admin` admin)
+- [ ] **Router** (`apps/game_server_web/lib/game_server_web/router/shared.ex` for API routes, `router/browser_routes.ex` for browser routes; the host router is `lib/game_server_host/router.ex`): add routes in the appropriate scope (`:api` public or `:api_auth` authenticated or `:api_admin` admin)
 
 ### If the feature has admin management
 - [ ] **Admin API controller** (`apps/game_server_web/lib/game_server_web/controllers/api/v1/admin/`): admin-only endpoints
@@ -701,5 +707,3 @@ config/                       # Environment configs
 docs/                         # Design documents (webrtc-design.md)
 ```
 
-# **Always end interactions with confirmation.**
-After completing any work or providing information, use `ask_questions` to confirm the task is complete and ask if anything else is needed. Never finish a turn without this confirmation.

@@ -71,7 +71,7 @@ defmodule GameServer.Lobbies do
   @lobby_cache_ttl_ms 60_000
 
   defp lobby_cache_version(lobby_id) when is_integer(lobby_id) do
-    GameServer.Cache.get({:lobbies, :lobby_version, lobby_id}) || 1
+    GameServer.Cache.get!({:lobbies, :lobby_version, lobby_id}) || 1
   end
 
   defp invalidate_lobby_cache(lobby_id) when is_integer(lobby_id) do
@@ -356,8 +356,8 @@ defmodule GameServer.Lobbies do
         if trimmed == "" do
           q
         else
-          prefix = String.downcase(trimmed) <> "%"
-          from l in q, where: fragment("lower(?) LIKE ?", l.title, ^prefix)
+          prefix = Repo.escape_like(String.downcase(trimmed)) <> "%"
+          from l in q, where: fragment("lower(?) LIKE ? ESCAPE '\\'", l.title, ^prefix)
         end
     end
   end
@@ -521,7 +521,7 @@ defmodule GameServer.Lobbies do
           {:ok, updated_user} ->
             # Post-commit: write the correct value to cache so stale
             # concurrent @decorate cacheable puts are overwritten.
-            GameServer.Cache.put({:accounts, :user, updated_user.id}, updated_user)
+            Accounts.cache_user(updated_user)
             {:ok, updated_user}
 
           error ->
@@ -701,7 +701,7 @@ defmodule GameServer.Lobbies do
         case multi_result do
           %{membership: updated_user} ->
             _ = invalidate_accounts_user_cache(updated_user.id)
-            GameServer.Cache.put({:accounts, :user, updated_user.id}, updated_user)
+            Accounts.cache_user(updated_user)
 
           _ ->
             :ok

@@ -50,6 +50,8 @@ services:
       CACHE_MODE: multi
       CACHE_L2: redis
       CACHE_REDIS_URL: redis://redis:6379/0
+      # Shared rate limiting across app instances
+      RATE_LIMIT_BACKEND: redis
       # ── HTTPS (uncomment to enable) ──
       # SSL_CERTFILE: /etc/letsencrypt/live/${PHX_HOST:-localhost}/fullchain.pem
       # SSL_KEYFILE: /etc/letsencrypt/live/${PHX_HOST:-localhost}/privkey.pem

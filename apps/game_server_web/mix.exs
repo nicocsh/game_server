@@ -77,6 +77,7 @@ defmodule GameServerWeb.MixProject do
       {:quantum, "~> 3.5"},
       {:corsica, "~> 2.0"},
       {:hammer, "~> 7.2"},
+      {:hammer_backend_redis, "~> 7.1"},
       {:ex_webrtc, "~> 0.16.0"},
       {:ex_sctp, "~> 0.1.2"},
       {:prom_ex, "~> 1.11"},

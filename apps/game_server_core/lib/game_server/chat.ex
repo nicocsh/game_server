@@ -41,7 +41,7 @@ defmodule GameServer.Chat do
   @chat_cache_ttl_ms 60_000
 
   defp chat_version(chat_type, chat_ref_id) do
-    GameServer.Cache.get({:chat, :version, chat_type, chat_ref_id}) || 1
+    GameServer.Cache.get!({:chat, :version, chat_type, chat_ref_id}) || 1
   end
 
   defp invalidate_chat_cache(chat_type, chat_ref_id) do
@@ -909,9 +909,15 @@ defmodule GameServer.Chat do
 
     query =
       case Map.get(filters, :content) || Map.get(filters, "content") do
-        nil -> query
-        "" -> query
-        v -> where(query, [m], like(m.content, ^"%#{escape_like(v)}%"))
+        nil ->
+          query
+
+        "" ->
+          query
+
+        v ->
+          pattern = "%#{Repo.escape_like(v)}%"
+          where(query, [m], fragment("? LIKE ? ESCAPE '\\'", m.content, ^pattern))
       end
 
     query
@@ -920,13 +926,6 @@ defmodule GameServer.Chat do
   defp admin_sort(query, "inserted_at_asc"), do: order_by(query, [m], asc: m.inserted_at)
   defp admin_sort(query, "inserted_at"), do: order_by(query, [m], desc: m.inserted_at)
   defp admin_sort(query, _), do: order_by(query, [m], desc: m.inserted_at)
-
-  defp escape_like(str) do
-    str
-    |> String.replace("\\", "\\\\")
-    |> String.replace("%", "\\%")
-    |> String.replace("_", "\\_")
-  end
 
   defp parse_int(v) when is_integer(v), do: v
 

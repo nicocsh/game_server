@@ -584,7 +584,7 @@ defmodule GameServerWeb.UserChannelTest do
     {:ok, _} = GameServer.Friends.accept_friend_request(f.id, b)
 
     # Mark a as online
-    {:ok, _} = GameServer.Accounts.set_user_online(a)
+    {:ok, _} = GameServer.Accounts.set_user_online(a.id)
 
     # b joins their channel to listen for friend_updated
     {:ok, token_b, _} = Guardian.encode_and_sign(b)

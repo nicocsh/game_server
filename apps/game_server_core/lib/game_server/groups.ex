@@ -110,7 +110,7 @@ defmodule GameServer.Groups do
   @group_cache_ttl_ms 60_000
 
   defp group_cache_version(group_id) when is_integer(group_id) do
-    GameServer.Cache.get({:groups, :group_version, group_id}) || 1
+    GameServer.Cache.get!({:groups, :group_version, group_id}) || 1
   end
 
   defp invalidate_group_cache(group_id) when is_integer(group_id) do
@@ -136,7 +136,7 @@ defmodule GameServer.Groups do
   @invite_cache_ttl_ms 60_000
 
   defp invite_cache_version(user_id) when is_integer(user_id) do
-    GameServer.Cache.get({:group_invites, :version, user_id}) || 1
+    GameServer.Cache.get!({:group_invites, :version, user_id}) || 1
   end
 
   defp invalidate_invite_cache(user_id) when is_integer(user_id) do
@@ -2093,8 +2093,8 @@ defmodule GameServer.Groups do
         q
 
       term ->
-        prefix = String.downcase(String.trim(term)) <> "%"
-        from g in q, where: fragment("lower(?) LIKE ?", g.title, ^prefix)
+        prefix = Repo.escape_like(String.downcase(String.trim(term))) <> "%"
+        from g in q, where: fragment("lower(?) LIKE ? ESCAPE '\\'", g.title, ^prefix)
     end
   end
 

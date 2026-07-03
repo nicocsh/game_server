@@ -42,6 +42,25 @@ defmodule GameServer.Accounts do
 
 
   @doc ~S"""
+    Broadcast a `friend_updated` event to all accepted friends.
+    
+    Used when public user data changes: map presence, display name, avatar,
+    player metadata, ship metadata, lobby/party state, etc.
+    
+  """
+  @spec broadcast_friend_update(GameServer.Accounts.User.t()) :: :ok
+  def broadcast_friend_update(_user) do
+    case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
+      :placeholder ->
+        :ok
+
+      _ ->
+        raise "GameServer.Accounts.broadcast_friend_update/1 is a stub - only available at runtime on GameServer"
+    end
+  end
+
+
+  @doc ~S"""
     Broadcast a `member_updated` event to the user's current lobby and
     party channels so other members see the profile change (display name, avatar,
     metadata, etc.) in real-time.
@@ -77,6 +96,26 @@ defmodule GameServer.Accounts do
 
       _ ->
         raise "GameServer.Accounts.broadcast_user_update/1 is a stub - only available at runtime on GameServer"
+    end
+  end
+
+
+  @doc ~S"""
+    Stores `user` under the canonical user cache key (with the standard TTL).
+    
+    Call after writes that update the user row outside this module (e.g. lobby
+    or party membership) so subsequent `get_user/1` reads stay warm and
+    consistent instead of serving the pre-write struct until the TTL expires.
+    
+  """
+  @spec cache_user(GameServer.Accounts.User.t()) :: GameServer.Accounts.User.t()
+  def cache_user(_user) do
+    case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
+      :placeholder ->
+        nil
+
+      _ ->
+        raise "GameServer.Accounts.cache_user/1 is a stub - only available at runtime on GameServer"
     end
   end
 
@@ -1233,6 +1272,28 @@ defmodule GameServer.Accounts do
 
       _ ->
         raise "GameServer.Accounts.require_account_activation?/0 is a stub - only available at runtime on GameServer"
+    end
+  end
+
+
+  @doc ~S"""
+    Revokes every credential the user holds: all session tokens are deleted and
+    `token_version` is bumped, which invalidates all previously issued JWT
+    access and refresh tokens ("log out everywhere").
+    
+    Returns `{:ok, {user, expired_tokens}}`.
+    
+  """
+  @spec revoke_all_tokens(GameServer.Accounts.User.t()) ::
+  {:ok, {GameServer.Accounts.User.t(), [GameServer.Accounts.UserToken.t()]}}
+  | {:error, Ecto.Changeset.t()}
+  def revoke_all_tokens(_user) do
+    case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
+      :placeholder ->
+        nil
+
+      _ ->
+        raise "GameServer.Accounts.revoke_all_tokens/1 is a stub - only available at runtime on GameServer"
     end
   end
 
