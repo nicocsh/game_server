@@ -23,7 +23,7 @@ defmodule GameServerWeb.Api.V1.PartyControllerTest do
   end
 
   defp set_all_online(users) do
-    Enum.each(users, &Accounts.set_user_online/1)
+    Enum.each(users, &Accounts.set_user_online(&1.id))
   end
 
   describe "POST /api/v1/parties" do

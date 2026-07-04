@@ -105,7 +105,7 @@ defmodule GameServer.Friends do
   @doc ~S"""
     Count blocked friendships for a user (number of blocked rows where user is target).
   """
-  @spec count_blocked_for_user(user_id() | GameServer.Accounts.User.t()) :: non_neg_integer()
+  @spec count_blocked_for_user(user_id()) :: non_neg_integer()
   def count_blocked_for_user(_user_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -120,7 +120,7 @@ defmodule GameServer.Friends do
   @doc ~S"""
     Count accepted friends for a given user (distinct other user ids).
   """
-  @spec count_friends_for_user(user_id() | GameServer.Accounts.User.t()) :: non_neg_integer()
+  @spec count_friends_for_user(user_id()) :: non_neg_integer()
   def count_friends_for_user(_user_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -135,7 +135,7 @@ defmodule GameServer.Friends do
   @doc ~S"""
     Count incoming pending friend requests for a user.
   """
-  @spec count_incoming_requests(user_id() | GameServer.Accounts.User.t()) :: non_neg_integer()
+  @spec count_incoming_requests(user_id()) :: non_neg_integer()
   def count_incoming_requests(_user_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -150,7 +150,7 @@ defmodule GameServer.Friends do
   @doc ~S"""
     Count outgoing pending friend requests for a user.
   """
-  @spec count_outgoing_requests(user_id() | GameServer.Accounts.User.t()) :: non_neg_integer()
+  @spec count_outgoing_requests(user_id()) :: non_neg_integer()
   def count_outgoing_requests(_user_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -265,9 +265,7 @@ defmodule GameServer.Friends do
   @doc ~S"""
     List blocked friendships for a user (Friendship structs where the user is the blocker / target).
   """
-  @spec list_blocked_for_user(user_id() | GameServer.Accounts.User.t()) :: [
-  GameServer.Friends.Friendship.t()
-]
+  @spec list_blocked_for_user(user_id()) :: [GameServer.Friends.Friendship.t()]
   def list_blocked_for_user(_user_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -282,10 +280,9 @@ defmodule GameServer.Friends do
   @doc ~S"""
     List blocked friendships for a user (Friendship structs where the user is the blocker / target).
   """
-  @spec list_blocked_for_user(
-  user_id() | GameServer.Accounts.User.t(),
-  GameServer.Types.pagination_opts()
-) :: [GameServer.Friends.Friendship.t()]
+  @spec list_blocked_for_user(user_id(), GameServer.Types.pagination_opts()) :: [
+  GameServer.Friends.Friendship.t()
+]
   def list_blocked_for_user(_user_id, _opts) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -305,7 +302,7 @@ defmodule GameServer.Friends do
     See `t:GameServer.Types.pagination_opts/0` for available options.
     
   """
-  @spec list_friends_for_user(integer() | GameServer.Accounts.User.t()) :: [GameServer.Accounts.User.t()]
+  @spec list_friends_for_user(integer()) :: [GameServer.Accounts.User.t()]
   def list_friends_for_user(_user_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -325,10 +322,9 @@ defmodule GameServer.Friends do
     See `t:GameServer.Types.pagination_opts/0` for available options.
     
   """
-  @spec list_friends_for_user(
-  integer() | GameServer.Accounts.User.t(),
-  GameServer.Types.pagination_opts()
-) :: [GameServer.Accounts.User.t()]
+  @spec list_friends_for_user(integer(), GameServer.Types.pagination_opts()) :: [
+  GameServer.Accounts.User.t()
+]
   def list_friends_for_user(_user_id, _opts) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -346,7 +342,7 @@ defmodule GameServer.Friends do
     Returns a list of maps: %{friendship_id: integer(), user: %User{}}
     
   """
-  @spec list_friends_with_friendship(integer() | GameServer.Accounts.User.t()) :: [
+  @spec list_friends_with_friendship(integer()) :: [
   %{friendship_id: integer(), user: GameServer.Accounts.User.t()}
 ]
   def list_friends_with_friendship(_user_id) do
@@ -366,14 +362,13 @@ defmodule GameServer.Friends do
     Returns a list of maps: %{friendship_id: integer(), user: %User{}}
     
   """
-  @spec list_friends_with_friendship(
-  integer() | GameServer.Accounts.User.t(),
-  GameServer.Types.pagination_opts()
-) :: [%{friendship_id: integer(), user: GameServer.Accounts.User.t()}]
+  @spec list_friends_with_friendship(integer(), GameServer.Types.pagination_opts()) :: [
+  %{friendship_id: integer(), user: GameServer.Accounts.User.t()}
+]
   def list_friends_with_friendship(_user_id, _opts) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
-        0
+        []
 
       _ ->
         raise "GameServer.Friends.list_friends_with_friendship/2 is a stub - only available at runtime on GameServer"
@@ -389,9 +384,7 @@ defmodule GameServer.Friends do
     See `t:GameServer.Types.pagination_opts/0` for available options.
     
   """
-  @spec list_incoming_requests(integer() | GameServer.Accounts.User.t()) :: [
-  GameServer.Friends.Friendship.t()
-]
+  @spec list_incoming_requests(integer()) :: [GameServer.Friends.Friendship.t()]
   def list_incoming_requests(_user_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -411,10 +404,9 @@ defmodule GameServer.Friends do
     See `t:GameServer.Types.pagination_opts/0` for available options.
     
   """
-  @spec list_incoming_requests(
-  integer() | GameServer.Accounts.User.t(),
-  GameServer.Types.pagination_opts()
-) :: [GameServer.Friends.Friendship.t()]
+  @spec list_incoming_requests(integer(), GameServer.Types.pagination_opts()) :: [
+  GameServer.Friends.Friendship.t()
+]
   def list_incoming_requests(_user_id, _opts) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -434,9 +426,7 @@ defmodule GameServer.Friends do
     See `t:GameServer.Types.pagination_opts/0` for available options.
     
   """
-  @spec list_outgoing_requests(integer() | GameServer.Accounts.User.t()) :: [
-  GameServer.Friends.Friendship.t()
-]
+  @spec list_outgoing_requests(integer()) :: [GameServer.Friends.Friendship.t()]
   def list_outgoing_requests(_user_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
@@ -456,10 +446,9 @@ defmodule GameServer.Friends do
     See `t:GameServer.Types.pagination_opts/0` for available options.
     
   """
-  @spec list_outgoing_requests(
-  integer() | GameServer.Accounts.User.t(),
-  GameServer.Types.pagination_opts()
-) :: [GameServer.Friends.Friendship.t()]
+  @spec list_outgoing_requests(integer(), GameServer.Types.pagination_opts()) :: [
+  GameServer.Friends.Friendship.t()
+]
   def list_outgoing_requests(_user_id, _opts) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->

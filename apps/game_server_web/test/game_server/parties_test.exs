@@ -52,7 +52,7 @@ defmodule GameServer.PartiesTest do
 
   # Sets all given users as online (required for party lobby operations).
   defp set_all_online(users) do
-    Enum.each(users, &Accounts.set_user_online/1)
+    Enum.each(users, &Accounts.set_user_online(&1.id))
   end
 
   # Creates a mutual friendship for invite eligibility.
@@ -188,7 +188,12 @@ defmodule GameServer.PartiesTest do
       assert invite.status == "pending"
 
       # Verify the informational notification was also created with metadata
-      [notification] = GameServer.Notifications.list_notifications(member1.id)
+      # (make_friends/2 also produces friend notifications, so filter by type)
+      [notification] =
+        member1.id
+        |> GameServer.Notifications.list_notifications()
+        |> Enum.filter(&(&1.metadata["type"] == "party_invite"))
+
       assert notification.metadata["sender_name"] == "LeaderDisplay"
       assert notification.metadata["recipient_name"] == "Member1Display"
     end

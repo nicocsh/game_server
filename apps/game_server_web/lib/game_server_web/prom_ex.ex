@@ -41,7 +41,8 @@ defmodule GameServerWeb.PromEx do
       {PromEx.Plugins.Application, otp_app: :game_server_web},
 
       # Geo traffic metrics (request count by country)
-      GameServerWeb.PromEx.GeoPlugin
+      GameServerWeb.PromEx.GeoPlugin,
+      GameServerWeb.PromEx.CachePlugin
     ]
   end
 

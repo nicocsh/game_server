@@ -27,7 +27,10 @@ defmodule GameServerHost.Application do
       GameServerWeb.PromEx,
       GameServer.Repo,
       {GameServer.Cache, []},
-      {Task.Supervisor, name: GameServer.TaskSupervisor},
+      # Aggregates cache hit/miss + overload counters for the admin dashboard
+      GameServer.Cache.Stats,
+      # Bounded: when full, GameServer.Async runs work inline (back-pressure)
+      {Task.Supervisor, name: GameServer.TaskSupervisor, max_children: 200},
       {DNSCluster, query: Application.get_env(:game_server_web, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: GameServer.PubSub},
       # Apply cache invalidations broadcast by other instances
@@ -43,10 +46,10 @@ defmodule GameServerHost.Application do
       # Load hook plugins (OTP apps) shipped under modules/plugins/*
       GameServer.Hooks.PluginManager,
       GameServerWeb.Endpoint,
-      # Auto-create notifications for friend events (must start after PubSub)
-      GameServer.Notifications.FriendNotifier,
       # Periodically mark stale online users as offline (safety net for crashes)
       GameServer.Accounts.StalePresenceSweeper,
+      # Prune old chat messages / notifications / payment events (RETENTION_* env vars)
+      GameServer.Retention,
       # Quantum scheduler for cron-like jobs
       GameServer.Schedule.Scheduler
     ]

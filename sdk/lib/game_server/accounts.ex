@@ -1376,12 +1376,14 @@ defmodule GameServer.Accounts do
 
   @doc ~S"""
     Mark a user as offline and update last_seen_at.
+    
+    Writes only on a real online→offline transition (see `set_user_online/1`).
+    
     Returns {:ok, user} on success.
     
   """
-  @spec set_user_offline(GameServer.Accounts.User.t() | integer()) ::
-  {:ok, GameServer.Accounts.User.t()} | {:error, term()}
-  def set_user_offline(_user) do
+  @spec set_user_offline(integer()) :: {:ok, GameServer.Accounts.User.t()} | {:error, term()}
+  def set_user_offline(_user_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
         {:ok, %GameServer.Accounts.User{id: 0, email: "", display_name: nil, metadata: %{}, is_admin: false, inserted_at: ~U[1970-01-01 00:00:00Z], updated_at: ~U[1970-01-01 00:00:00Z]}}
@@ -1394,12 +1396,17 @@ defmodule GameServer.Accounts do
 
   @doc ~S"""
     Mark a user as online and update last_seen_at.
+    
+    Writes only on a real offline→online transition: reconnects and extra
+    tabs/sockets while already online are no-ops, so reconnect storms don't
+    hammer the `users` table (and the `after_user_online` hook fires once per
+    session, not once per socket).
+    
     Returns {:ok, user} on success.
     
   """
-  @spec set_user_online(GameServer.Accounts.User.t() | integer()) ::
-  {:ok, GameServer.Accounts.User.t()} | {:error, term()}
-  def set_user_online(_user) do
+  @spec set_user_online(integer()) :: {:ok, GameServer.Accounts.User.t()} | {:error, term()}
+  def set_user_online(_user_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
       :placeholder ->
         {:ok, %GameServer.Accounts.User{id: 0, email: "", display_name: nil, metadata: %{}, is_admin: false, inserted_at: ~U[1970-01-01 00:00:00Z], updated_at: ~U[1970-01-01 00:00:00Z]}}

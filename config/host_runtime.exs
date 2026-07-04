@@ -443,6 +443,12 @@ if config_env() == :prod do
   # Expose these choices via application config so endpoint/plug can pick them up
   config :game_server_web, :cors_allowed_origins, cors_allowed_origins
 
+  # Data retention — prune old rows periodically (days; 0/unset keeps forever).
+  config :game_server_core, GameServer.Retention,
+    chat_messages_days: GameServer.Env.integer("RETENTION_CHAT_DAYS", 0),
+    notifications_days: GameServer.Env.integer("RETENTION_NOTIFICATIONS_DAYS", 0),
+    payment_events_days: GameServer.Env.integer("RETENTION_PAYMENT_EVENTS_DAYS", 0)
+
   # Rate Limiting — configurable per-IP request throttling via RATE_LIMIT_* env vars.
   rate_limit_opts = [
     general_limit: String.to_integer(System.get_env("RATE_LIMIT_HTTP_GENERAL_LIMIT", "240")),

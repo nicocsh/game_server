@@ -170,7 +170,7 @@ API routes use JWT tokens via Guardian for stateless authentication:
 ### Groups
 
 - Groups have three types: `"public"` (anyone can join directly), `"private"` (users request to join, admins approve), `"hidden"` (invite-only, never shown in public listings).
-- Group context: `GameServer.Groups` — key functions: `list_groups/2`, `create_group/2`, `join_group/2` (public), `request_join/2` (private), `invite_to_group/3`, `leave_group/2`, `kick_member/3`, `promote_member/3`, `demote_member/3`, `approve_request/3`, `reject_request/3`.
+- Group context: `GameServer.Groups` (invites live in `GameServer.Groups.Invites`, join requests in `GameServer.Groups.JoinRequests`; the public API is re-exported from `GameServer.Groups`) — key functions: `list_groups/2`, `create_group/2`, `join_group/2` (public), `request_join/2` (private), `invite_to_group/3`, `leave_group/2`, `kick_member/3`, `promote_member/3`, `demote_member/3`, `approve_request/3`, `reject_request/3`.
 - Group membership is stored in the `group_members` table with a `role` field (`"admin"` or `"member"`). The group creator becomes admin automatically.
 - Join requests are stored in the `group_join_requests` table with `status`: `"pending"`, `"approved"`, `"rejected"`.
 - **Group invites** are stored in the dedicated `group_invites` table with fields: `id`, `group_id`, `sender_id`, `recipient_id`, `status` (`"pending"`, `"accepted"`, `"declined"`, `"cancelled"`), `inserted_at`, `updated_at`. An informational notification is also sent, but the invite record is independent — deleting notifications does not affect pending invites.
@@ -227,7 +227,7 @@ API routes use JWT tokens via Guardian for stateless authentication:
 
 - Notification context: `GameServer.Notifications` — key functions: `admin_create_notification/3`, `create_chat_notification/3`, `send_notification/2`, `delete_notification_by/3`, `delete_notifications/2`.
 - Schema: `id`, `sender_id`, `recipient_id`, `title`, `content`, `metadata` (map), `read` (boolean), timestamps. Upserts on `(sender_id, recipient_id, title)`.
-- `FriendNotifier` GenServer subscribes to `"friends"` PubSub topic and auto-creates persistent notifications.
+- Friend notifications are created fire-and-forget at the event source in `GameServer.Friends` (via `GameServer.Async.run`), like all other domains — there is no PubSub-subscribing notifier process.
 - All notifications carry a `metadata.type` string tag for client-side routing/filtering. The complete list of notification types:
 
   **Friends:**
@@ -320,7 +320,7 @@ API routes use JWT tokens via Guardian for stateless authentication:
   - count: number of items on the returned page
   - total_count: total number of matching items (use domain-level count helpers)
   - total_pages: number of pages (computed: ceil(total_count / page_size))
-  - has_more: boolean (true when count == page_size)
+  - has_more: boolean (true when page < total_pages — exact, not a heuristic)
 
 - Domain responsibilities: Add a lightweight count helper for list endpoints (eg. Accounts.count_search_users/1, Friends.count_friends_for_user/1, Lobbies.count_list_lobbies/1). Controllers should use these helpers to populate `total_count` without pulling all rows.
 

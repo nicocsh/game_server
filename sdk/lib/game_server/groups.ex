@@ -54,10 +54,7 @@ defmodule GameServer.Groups do
 
 
   @doc ~S"""
-    Accept a pending group invite by **invite_id**.
-    The user must be the recipient of the invite.
-    Works for all group types (public, private, hidden).
-    
+    Accept a pending group invite by invite id (recipient only).
   """
   @spec accept_invite(integer(), integer()) :: {:ok, GameServer.Groups.GroupMember.t()} | {:error, atom()}
   def accept_invite(_user_id, _invite_id) do
@@ -164,9 +161,7 @@ defmodule GameServer.Groups do
 
 
   @doc ~S"""
-    Cancel (delete) a group invitation that the current user sent.
-    Only the sender can cancel their own invitation.
-    
+    Cancel a group invitation the current user sent.
   """
   @spec cancel_invite(integer(), integer()) :: :ok | {:error, atom()}
   def cancel_invite(_user_id, _invite_id) do
@@ -301,7 +296,9 @@ defmodule GameServer.Groups do
   end
 
 
-  @doc false
+  @doc ~S"""
+    Count pending join requests for a group.
+  """
   @spec count_join_requests(integer()) :: non_neg_integer()
   def count_join_requests(_group_id) do
     case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
@@ -392,10 +389,7 @@ defmodule GameServer.Groups do
 
 
   @doc ~S"""
-    Decline a pending group invite by **invite_id**.
-    Only the recipient can decline. The invite is marked as `"declined"`
-    (not deleted) so the sender can see the outcome.
-    
+    Decline a pending group invite by invite id (recipient only).
   """
   @spec decline_invite(integer(), integer()) :: :ok | {:error, atom()}
   def decline_invite(_user_id, _invite_id) do
@@ -577,14 +571,7 @@ defmodule GameServer.Groups do
 
 
   @doc ~S"""
-    Invite a user to a group. Creates a `GroupInvite` record and sends
-    an informational notification. The invite record is independent of the
-    notification — deleting notifications does not affect pending invites.
-    
-    If the target user already has a pending join request for this group,
-    the request is automatically approved instead of creating an invite.
-    In that case, returns `{:ok, :request_approved}`.
-    
+    Invite a user to a group (see `GameServer.Groups.Invites.invite_to_group/3`).
   """
   @spec invite_to_group(integer(), integer(), integer()) ::
   {:ok, GameServer.Groups.GroupInvite.t()} | {:ok, :request_approved} | {:error, atom()}
@@ -699,7 +686,6 @@ defmodule GameServer.Groups do
 
   @doc ~S"""
     List pending group invitations for a user.
-    
   """
   @spec list_invitations(
   integer(),
@@ -734,7 +720,6 @@ defmodule GameServer.Groups do
 
   @doc ~S"""
     List group invitations sent by a user.
-    
   """
   @spec list_sent_invitations(
   integer(),
@@ -883,7 +868,6 @@ defmodule GameServer.Groups do
 
   @doc ~S"""
     Request to join a private group. Creates a pending join request.
-    
   """
   @spec request_join(integer(), integer()) ::
   {:ok, GameServer.Groups.GroupJoinRequest.t()} | {:error, atom()}

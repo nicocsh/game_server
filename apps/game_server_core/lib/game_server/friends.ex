@@ -124,6 +124,82 @@ defmodule GameServer.Friends do
     Phoenix.PubSub.broadcast(GameServer.PubSub, @friends_topic, event)
   end
 
+  # ── Friend notifications ────────────────────────────────────────────────
+  #
+  # Created synchronously at the event source (not via a PubSub-subscribing
+  # GenServer), matching how groups and parties create invite notifications:
+  # each event is written exactly once regardless of how many app instances
+  # run, and never queues behind a single process.
+
+  defp notify_friend_request(%Friendship{} = f) do
+    requester_name = user_display_name(f.requester_id)
+
+    _ =
+      GameServer.Notifications.admin_create_notification(f.requester_id, f.target_id, %{
+        "title" => "#{requester_name} sent you a friend request",
+        "content" => "",
+        "metadata" => %{"type" => "friend_request", "friendship_id" => f.id}
+      })
+
+    :ok
+  end
+
+  defp notify_friend_accepted(%Friendship{} = f) do
+    target_name = user_display_name(f.target_id)
+
+    _ =
+      GameServer.Notifications.admin_create_notification(f.target_id, f.requester_id, %{
+        "title" => "#{target_name} accepted your friend request",
+        "content" => "",
+        "metadata" => %{"type" => "friend_accepted", "friendship_id" => f.id}
+      })
+
+    :ok
+  end
+
+  defp notify_friend_declined(%Friendship{} = f) do
+    requester_name = user_display_name(f.requester_id)
+    target_name = user_display_name(f.target_id)
+
+    _ =
+      GameServer.Notifications.delete_notification_by(
+        f.requester_id,
+        f.target_id,
+        "#{requester_name} sent you a friend request"
+      )
+
+    _ =
+      GameServer.Notifications.admin_create_notification(f.target_id, f.requester_id, %{
+        "title" => "#{target_name} declined your friend request",
+        "content" => "",
+        "metadata" => %{"type" => "friend_declined", "friendship_id" => f.id}
+      })
+
+    :ok
+  end
+
+  # Retracts the original friend-request notification when the request is
+  # cancelled by the requester.
+  defp retract_friend_request_notification(%Friendship{} = f) do
+    requester_name = user_display_name(f.requester_id)
+
+    _ =
+      GameServer.Notifications.delete_notification_by(
+        f.requester_id,
+        f.target_id,
+        "#{requester_name} sent you a friend request"
+      )
+
+    :ok
+  end
+
+  defp user_display_name(user_id) do
+    case GameServer.Accounts.get_user(user_id) do
+      %{display_name: name} when is_binary(name) and name != "" -> name
+      _ -> "User ##{user_id}"
+    end
+  end
+
   @doc "Create a friend request from requester -> target.
   If a reverse pending request exists (target -> requester) it will be accepted instead.
   Returns {:ok, friendship} on success or {:error, reason}.
@@ -169,6 +245,7 @@ defmodule GameServer.Friends do
           broadcast_user(target_id, {:incoming_request, f})
           broadcast_user(requester_id, {:outgoing_request, f})
           broadcast_all({:friend_created, f})
+          notify_friend_request(f)
           {:ok, f}
 
         {:error, {:accept_reverse, friendship_id}} ->
@@ -299,6 +376,7 @@ defmodule GameServer.Friends do
         broadcast_user(accepted.requester_id, {:friend_accepted, accepted})
         broadcast_user(accepted.target_id, {:friend_accepted, accepted})
         broadcast_all({:friend_accepted, accepted})
+        notify_friend_accepted(accepted)
 
         accepted
       else
@@ -323,6 +401,7 @@ defmodule GameServer.Friends do
       broadcast_user(rejected.requester_id, {:friend_rejected, rejected})
       broadcast_user(rejected.target_id, {:friend_rejected, rejected})
       broadcast_all({:friend_rejected, rejected})
+      notify_friend_declined(rejected)
 
       {:ok, rejected}
     else
@@ -346,6 +425,7 @@ defmodule GameServer.Friends do
       broadcast_user(f.requester_id, {:request_cancelled, f})
       broadcast_user(f.target_id, {:request_cancelled, f})
       broadcast_all({:request_cancelled, f})
+      retract_friend_request_notification(f)
 
       {:ok, :cancelled}
     else

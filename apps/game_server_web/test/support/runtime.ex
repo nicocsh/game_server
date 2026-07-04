@@ -25,7 +25,8 @@ defmodule GameServerWeb.TestSupport.Runtime do
     [
       GameServer.Repo,
       {GameServer.Cache, []},
-      {Task.Supervisor, name: GameServer.TaskSupervisor},
+      GameServer.Cache.Stats,
+      {Task.Supervisor, name: GameServer.TaskSupervisor, max_children: 200},
       {Phoenix.PubSub, name: GameServer.PubSub},
       GameServer.Cache.Sync,
       GameServerWeb.ConnectionTracker,

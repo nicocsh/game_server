@@ -2010,6 +2010,12 @@ defmodule GameServer.Accounts do
 
   @doc """
   Mark a user as online and update last_seen_at.
+
+  Writes only on a real offline→online transition: reconnects and extra
+  tabs/sockets while already online are no-ops, so reconnect storms don't
+  hammer the `users` table (and the `after_user_online` hook fires once per
+  session, not once per socket).
+
   Returns {:ok, user} on success.
   """
   @spec set_user_online(integer()) :: {:ok, User.t()} | {:error, term()}
@@ -2019,6 +2025,9 @@ defmodule GameServer.Accounts do
     case Repo.get(User, user_id) do
       nil ->
         {:error, :not_found}
+
+      %User{is_online: true} = user ->
+        {:ok, user}
 
       user ->
         user
@@ -2043,6 +2052,9 @@ defmodule GameServer.Accounts do
 
   @doc """
   Mark a user as offline and update last_seen_at.
+
+  Writes only on a real online→offline transition (see `set_user_online/1`).
+
   Returns {:ok, user} on success.
   """
   @spec set_user_offline(integer()) :: {:ok, User.t()} | {:error, term()}
@@ -2052,6 +2064,9 @@ defmodule GameServer.Accounts do
     case Repo.get(User, user_id) do
       nil ->
         {:error, :not_found}
+
+      %User{is_online: false} = user ->
+        {:ok, user}
 
       user ->
         user

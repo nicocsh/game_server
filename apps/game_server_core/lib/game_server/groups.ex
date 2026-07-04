@@ -50,11 +50,12 @@ defmodule GameServer.Groups do
   import Ecto.Query, warn: false
   use Nebulex.Caching, cache: GameServer.Cache
 
-  alias GameServer.Friends
   alias GameServer.Groups.Group
-  alias GameServer.Groups.GroupInvite
   alias GameServer.Groups.GroupJoinRequest
   alias GameServer.Groups.GroupMember
+  alias GameServer.Groups.Invites
+  alias GameServer.Groups.JoinRequests
+  alias GameServer.Groups.Shared
   alias GameServer.Repo
   alias GameServer.Repo.AdvisoryLock
 
@@ -109,18 +110,8 @@ defmodule GameServer.Groups do
 
   @group_cache_ttl_ms 60_000
 
-  defp group_cache_version(group_id) when is_integer(group_id) do
-    GameServer.Cache.get!({:groups, :group_version, group_id}) || 1
-  end
-
-  defp invalidate_group_cache(group_id) when is_integer(group_id) do
-    GameServer.Async.run(fn ->
-      _ = GameServer.Cache.incr({:groups, :group_version, group_id}, 1, default: 1)
-      :ok
-    end)
-
-    :ok
-  end
+  defp group_cache_version(group_id), do: Shared.group_cache_version(group_id)
+  defp invalidate_group_cache(group_id), do: Shared.invalidate_group_cache(group_id)
 
   defp cache_match(nil), do: false
   defp cache_match(_), do: true
@@ -129,121 +120,6 @@ defmodule GameServer.Groups do
   @spec invalidate_group_cache_public(integer()) :: :ok
   def invalidate_group_cache_public(group_id) when is_integer(group_id) do
     invalidate_group_cache(group_id)
-  end
-
-  # -- Invite cache (version-based, keyed by user_id) --
-
-  @invite_cache_ttl_ms 60_000
-
-  defp invite_cache_version(user_id) when is_integer(user_id) do
-    GameServer.Cache.get!({:group_invites, :version, user_id}) || 1
-  end
-
-  defp invalidate_invite_cache(user_id) when is_integer(user_id) do
-    GameServer.Async.run(fn ->
-      _ = GameServer.Cache.incr({:group_invites, :version, user_id}, 1, default: 1)
-      :ok
-    end)
-
-    :ok
-  end
-
-  # Synchronous version — used when the caller needs the cache to be
-  # invalidated immediately before returning (e.g. accept_invite where the
-  # client polls right away).
-  defp invalidate_invite_cache_sync(user_id) when is_integer(user_id) do
-    _ = GameServer.Cache.incr({:group_invites, :version, user_id}, 1, default: 1)
-    :ok
-  end
-
-  # Mark any pending GroupInvite records for a user+group as "accepted" and
-  # notify/invalidate caches for each sender. Called when a user joins a group
-  # through a path other than accept_invite (e.g. manual join, admin approval).
-  defp mark_pending_invites_accepted(user_id, group_id) do
-    pending_invites =
-      from(i in GroupInvite,
-        where:
-          i.recipient_id == ^user_id and i.group_id == ^group_id and
-            i.status == "pending"
-      )
-      |> Repo.all()
-
-    if pending_invites != [] do
-      from(i in GroupInvite,
-        where:
-          i.recipient_id == ^user_id and i.group_id == ^group_id and
-            i.status == "pending"
-      )
-      |> Repo.update_all(set: [status: "accepted", updated_at: DateTime.utc_now()])
-
-      invalidate_invite_cache_sync(user_id)
-
-      user = GameServer.Accounts.get_user(user_id)
-      user_name = (user && user.display_name) || ""
-      group = get_group(group_id)
-      group_title = (group && group.title) || ""
-
-      sender_ids = pending_invites |> Enum.map(& &1.sender_id) |> Enum.uniq()
-
-      for sender_id <- sender_ids do
-        invalidate_invite_cache_sync(sender_id)
-
-        GameServer.Notifications.admin_create_notification(
-          user_id,
-          sender_id,
-          %{
-            "title" => "#{user_name} joined #{group_title}",
-            "content" => "",
-            "metadata" => %{
-              "type" => "group_invite_accepted",
-              "group_id" => group_id,
-              "group_name" => group_title,
-              "user_id" => user_id,
-              "user_name" => user_name
-            }
-          }
-        )
-
-        Phoenix.PubSub.broadcast(
-          GameServer.PubSub,
-          "user:#{sender_id}",
-          {:group_invite_accepted, %{group_id: group_id}}
-        )
-      end
-    end
-
-    :ok
-  end
-
-  # Collect unique user IDs (senders + recipients) with pending invites for a group.
-  # Must be called BEFORE deleting the group (cascade deletes the rows).
-  defp gather_pending_invite_user_ids(group_id) do
-    from(i in GroupInvite,
-      where: i.group_id == ^group_id and i.status == "pending",
-      select: {i.sender_id, i.recipient_id}
-    )
-    |> Repo.all()
-    |> Enum.flat_map(fn {s, r} -> [s, r] end)
-    |> Enum.uniq()
-  end
-
-  # Invalidate invite caches for a list of user IDs.
-  defp invalidate_invite_caches_for_users(user_ids) do
-    for uid <- user_ids, do: invalidate_invite_cache_sync(uid)
-    :ok
-  end
-
-  # Broadcast a group_deleted event to each user who had a pending invite.
-  defp notify_invite_users_group_deleted(user_ids, group) do
-    for uid <- user_ids do
-      Phoenix.PubSub.broadcast(
-        GameServer.PubSub,
-        "user:#{uid}",
-        {:group_invite_cancelled, %{group_id: group.id, group_name: group.title}}
-      )
-    end
-
-    :ok
   end
 
   # ---------------------------------------------------------------------------
@@ -502,52 +378,6 @@ defmodule GameServer.Groups do
     |> Kernel.||(0)
   end
 
-  @doc "List pending join requests sent by a user."
-  @spec list_user_pending_requests(integer()) :: [GroupJoinRequest.t()]
-  def list_user_pending_requests(user_id) when is_integer(user_id) do
-    from(r in GroupJoinRequest,
-      where: r.user_id == ^user_id and r.status == "pending",
-      join: g in assoc(r, :group),
-      order_by: [desc: r.inserted_at],
-      preload: [group: g]
-    )
-    |> Repo.all()
-  end
-
-  @doc "Count pending invitations for a user."
-  @spec count_invitations(integer()) :: non_neg_integer()
-  @decorate cacheable(
-              key: {:group_invites, :count, invite_cache_version(user_id), user_id},
-              opts: [ttl: @invite_cache_ttl_ms]
-            )
-  def count_invitations(user_id) when is_integer(user_id) do
-    import Ecto.Query
-
-    from(i in GroupInvite,
-      where: i.recipient_id == ^user_id and i.status == "pending",
-      select: count(i.id)
-    )
-    |> Repo.one()
-    |> Kernel.||(0)
-  end
-
-  @doc "Count group invitations sent by a user."
-  @spec count_sent_invitations(integer()) :: non_neg_integer()
-  @decorate cacheable(
-              key: {:group_invites, :count_sent, invite_cache_version(user_id), user_id},
-              opts: [ttl: @invite_cache_ttl_ms]
-            )
-  def count_sent_invitations(user_id) when is_integer(user_id) do
-    import Ecto.Query
-
-    from(i in GroupInvite,
-      where: i.sender_id == ^user_id and i.status == "pending",
-      select: count(i.id)
-    )
-    |> Repo.one()
-    |> Kernel.||(0)
-  end
-
   # ---------------------------------------------------------------------------
   # Commands – create
   # ---------------------------------------------------------------------------
@@ -713,13 +543,13 @@ defmodule GameServer.Groups do
       true ->
         group = get_group!(group_id)
         # Gather pending invite user IDs before cascade-delete removes them
-        pending_invite_user_ids = gather_pending_invite_user_ids(group_id)
+        pending_invite_user_ids = Shared.gather_pending_invite_user_ids(group_id)
 
         case Repo.delete(group) do
           {:ok, deleted} ->
             _ = invalidate_group_cache(deleted.id)
-            invalidate_invite_caches_for_users(pending_invite_user_ids)
-            notify_invite_users_group_deleted(pending_invite_user_ids, deleted)
+            Shared.invalidate_invite_caches_for_users(pending_invite_user_ids)
+            Shared.notify_invite_users_group_deleted(pending_invite_user_ids, deleted)
             GameServer.Chat.cleanup_chat("group", deleted.id)
             broadcast_groups({:group_deleted, deleted.id})
 
@@ -740,13 +570,13 @@ defmodule GameServer.Groups do
   def admin_delete_group(group_id) when is_integer(group_id) do
     group = get_group!(group_id)
     # Gather pending invite user IDs before cascade-delete removes them
-    pending_invite_user_ids = gather_pending_invite_user_ids(group_id)
+    pending_invite_user_ids = Shared.gather_pending_invite_user_ids(group_id)
 
     case Repo.delete(group) do
       {:ok, deleted} ->
         _ = invalidate_group_cache(deleted.id)
-        invalidate_invite_caches_for_users(pending_invite_user_ids)
-        notify_invite_users_group_deleted(pending_invite_user_ids, deleted)
+        Shared.invalidate_invite_caches_for_users(pending_invite_user_ids)
+        Shared.notify_invite_users_group_deleted(pending_invite_user_ids, deleted)
         GameServer.Chat.cleanup_chat("group", deleted.id)
         broadcast_groups({:group_deleted, deleted.id})
 
@@ -820,10 +650,10 @@ defmodule GameServer.Groups do
         {:ok, get_membership(group_id, user_id)}
 
       true ->
-        case do_add_group_member(user_id, group_id, group, "public_join") do
+        case Shared.do_add_group_member(user_id, group_id, group, "public_join") do
           {:ok, member} ->
             # Clean up any pending invites for this user + group
-            mark_pending_invites_accepted(user_id, group_id)
+            Shared.mark_pending_invites_accepted(user_id, group_id)
 
             GameServer.Async.run(fn ->
               GameServer.Hooks.internal_call(:after_group_join, [user_id, group])
@@ -1141,794 +971,6 @@ defmodule GameServer.Groups do
   end
 
   # ---------------------------------------------------------------------------
-  # Commands – join requests (private groups)
-  # ---------------------------------------------------------------------------
-
-  @doc """
-  Request to join a private group. Creates a pending join request.
-  """
-  @spec request_join(integer(), integer()) ::
-          {:ok, GroupJoinRequest.t()} | {:error, atom()}
-  def request_join(user_id, group_id)
-      when is_integer(user_id) and is_integer(group_id) do
-    group = get_group(group_id)
-
-    cond do
-      is_nil(group) ->
-        {:error, :not_found}
-
-      group.type != "private" ->
-        {:error, :not_private}
-
-      member?(group_id, user_id) ->
-        {:error, :already_member}
-
-      true ->
-        # Check for existing pending request
-        existing =
-          Repo.get_by(GroupJoinRequest,
-            group_id: group_id,
-            user_id: user_id,
-            status: "pending"
-          )
-
-        if existing do
-          # Idempotent: return existing pending request instead of erroring
-          {:ok, existing}
-        else
-          %GroupJoinRequest{}
-          |> GroupJoinRequest.changeset(%{group_id: group_id, user_id: user_id})
-          |> Repo.insert(
-            on_conflict: {:replace, [:status, :updated_at]},
-            conflict_target: [:group_id, :user_id]
-          )
-          |> case do
-            {:ok, request} ->
-              broadcast_group(group_id, {:join_request_created, group_id, user_id})
-              notify_admins_of_join_request(user_id, group_id, group)
-              {:ok, request}
-
-            error ->
-              error
-          end
-        end
-    end
-  end
-
-  defp notify_admins_of_join_request(user_id, group_id, group) do
-    user = GameServer.Accounts.get_user(user_id)
-    user_name = (user && user.display_name) || ""
-
-    admins =
-      from(m in GroupMember,
-        where: m.group_id == ^group_id and m.role == "admin",
-        select: m.user_id
-      )
-      |> Repo.all()
-
-    for admin_id <- admins do
-      GameServer.Notifications.admin_create_notification(
-        user_id,
-        admin_id,
-        %{
-          "title" => "#{user_name} wants to join #{group.title}",
-          "content" => "",
-          "metadata" => %{
-            "type" => "group_join_request",
-            "group_id" => group_id,
-            "group_name" => group.title,
-            "user_id" => user_id,
-            "user_name" => user_name
-          }
-        }
-      )
-    end
-  end
-
-  @doc "List pending join requests for a group (admin only)."
-  @spec list_join_requests(integer(), integer(), keyword()) ::
-          {:ok, [GroupJoinRequest.t()]} | {:error, atom()}
-  def list_join_requests(admin_id, group_id, opts \\ [])
-      when is_integer(admin_id) and is_integer(group_id) do
-    if admin?(group_id, admin_id) do
-      page = Keyword.get(opts, :page, 1)
-      page_size = Keyword.get(opts, :page_size, 25)
-      offset = (page - 1) * page_size
-
-      requests =
-        from(r in GroupJoinRequest,
-          where: r.group_id == ^group_id and r.status == "pending",
-          order_by: [asc: r.inserted_at],
-          limit: ^page_size,
-          offset: ^offset,
-          preload: [:user]
-        )
-        |> Repo.all()
-
-      {:ok, requests}
-    else
-      {:error, :not_admin}
-    end
-  end
-
-  @spec count_join_requests(integer()) :: non_neg_integer()
-  def count_join_requests(group_id) when is_integer(group_id) do
-    Repo.one(
-      from(r in GroupJoinRequest,
-        where: r.group_id == ^group_id and r.status == "pending",
-        select: count(r.id)
-      )
-    ) || 0
-  end
-
-  @doc "Approve a pending join request. Admin only."
-  @spec approve_join_request(integer(), integer()) ::
-          {:ok, GroupMember.t()} | {:error, atom()}
-  def approve_join_request(admin_id, request_id)
-      when is_integer(admin_id) and is_integer(request_id) do
-    case Repo.get(GroupJoinRequest, request_id) do
-      nil ->
-        {:error, :not_found}
-
-      %GroupJoinRequest{status: status} when status != "pending" ->
-        {:error, :not_pending}
-
-      %GroupJoinRequest{group_id: group_id} = request ->
-        group = get_group!(group_id)
-
-        if admin?(group_id, admin_id) do
-          approve_join_request_with_hook(request, group, admin_id, request_id)
-        else
-          {:error, :not_admin}
-        end
-    end
-  end
-
-  defp approve_join_request_with_hook(request, group, admin_id, request_id) do
-    group_id = request.group_id
-    user_id = request.user_id
-
-    case run_before_group_join_hook(user_id, group, %{
-           "source" => "join_request_approval",
-           "request_id" => request_id,
-           "actor_user_id" => admin_id,
-           "admin_id" => admin_id
-         }) do
-      :ok ->
-        Ecto.Multi.new()
-        |> Ecto.Multi.run(:lock_and_check, fn _repo, _changes ->
-          AdvisoryLock.lock(:group, group_id)
-
-          if count_group_members(group_id) >= group.max_members do
-            {:error, :full}
-          else
-            {:ok, :space_available}
-          end
-        end)
-        |> Ecto.Multi.update(:request, Ecto.Changeset.change(request, %{status: "accepted"}))
-        |> Ecto.Multi.insert(:membership, fn _changes ->
-          GroupMember.changeset(%GroupMember{}, %{
-            group_id: group_id,
-            user_id: user_id,
-            role: "member"
-          })
-        end)
-        |> Repo.transaction()
-        |> case do
-          {:ok, %{membership: member}} ->
-            _ = invalidate_group_cache(group_id)
-            mark_pending_invites_accepted(user_id, group_id)
-            broadcast_group(group_id, {:join_request_approved, group_id, user_id})
-            broadcast_group(group_id, {:member_joined, group_id, user_id})
-
-            # Notify the user that their join request was approved
-            admin = GameServer.Accounts.get_user(admin_id)
-            admin_name = (admin && admin.display_name) || ""
-
-            GameServer.Notifications.admin_create_notification(
-              admin_id,
-              user_id,
-              %{
-                "title" => "Approved to join #{group.title}",
-                "content" => "",
-                "metadata" => %{
-                  "type" => "group_join_approved",
-                  "group_id" => group_id,
-                  "group_name" => group.title,
-                  "admin_id" => admin_id,
-                  "admin_name" => admin_name
-                }
-              }
-            )
-
-            Phoenix.PubSub.broadcast(
-              GameServer.PubSub,
-              "user:#{user_id}",
-              {:group_join_approved, %{group_id: group_id}}
-            )
-
-            GameServer.Async.run(fn ->
-              GameServer.Hooks.internal_call(:after_group_join, [user_id, group])
-            end)
-
-            {:ok, member}
-
-          {:error, _op, changeset, _} ->
-            {:error, changeset}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc "Reject a pending join request. Admin only."
-  @spec reject_join_request(integer(), integer()) ::
-          {:ok, GroupJoinRequest.t()} | {:error, atom()}
-  def reject_join_request(admin_id, request_id)
-      when is_integer(admin_id) and is_integer(request_id) do
-    case Repo.get(GroupJoinRequest, request_id) do
-      nil ->
-        {:error, :not_found}
-
-      %GroupJoinRequest{status: status} when status != "pending" ->
-        {:error, :not_pending}
-
-      %GroupJoinRequest{group_id: group_id} = request ->
-        if admin?(group_id, admin_id) do
-          request
-          |> Ecto.Changeset.change(%{status: "rejected"})
-          |> Repo.update()
-          |> case do
-            {:ok, updated} ->
-              broadcast_group(group_id, {:join_request_rejected, group_id, updated.user_id})
-
-              # Notify the user that their join request was rejected
-              group = get_group(group_id)
-              group_title = (group && group.title) || ""
-
-              GameServer.Notifications.admin_create_notification(
-                admin_id,
-                updated.user_id,
-                %{
-                  "title" => "Declined from #{group_title}",
-                  "content" => "",
-                  "metadata" => %{
-                    "type" => "group_join_declined",
-                    "group_id" => group_id,
-                    "group_name" => group_title
-                  }
-                }
-              )
-
-              Phoenix.PubSub.broadcast(
-                GameServer.PubSub,
-                "user:#{updated.user_id}",
-                {:group_join_rejected, %{group_id: group_id}}
-              )
-
-              {:ok, updated}
-
-            error ->
-              error
-          end
-        else
-          {:error, :not_admin}
-        end
-    end
-  end
-
-  @doc "Cancel (delete) a pending join request. Only the requesting user can cancel."
-  @spec cancel_join_request(integer(), integer()) ::
-          {:ok, GroupJoinRequest.t()} | {:error, atom()}
-  def cancel_join_request(user_id, request_id)
-      when is_integer(user_id) and is_integer(request_id) do
-    case Repo.get(GroupJoinRequest, request_id) do
-      nil ->
-        {:error, :not_found}
-
-      %GroupJoinRequest{user_id: ^user_id, status: "pending"} = request ->
-        case Repo.delete(request) do
-          {:ok, deleted} ->
-            broadcast_group(
-              request.group_id,
-              {:join_request_cancelled, request.group_id, user_id}
-            )
-
-            {:ok, deleted}
-
-          error ->
-            error
-        end
-
-      %GroupJoinRequest{status: status} when status != "pending" ->
-        {:error, :not_pending}
-
-      _other ->
-        {:error, :not_owner}
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Commands – invite (hidden groups)
-  # ---------------------------------------------------------------------------
-
-  @doc """
-  Invite a user to a group. Creates a `GroupInvite` record and sends
-  an informational notification. The invite record is independent of the
-  notification — deleting notifications does not affect pending invites.
-
-  If the target user already has a pending join request for this group,
-  the request is automatically approved instead of creating an invite.
-  In that case, returns `{:ok, :request_approved}`.
-  """
-  @spec invite_to_group(integer(), integer(), integer()) ::
-          {:ok, GroupInvite.t()} | {:ok, :request_approved} | {:error, atom()}
-  def invite_to_group(admin_id, group_id, target_user_id)
-      when is_integer(admin_id) and is_integer(group_id) and is_integer(target_user_id) do
-    group = get_group(group_id)
-
-    cond do
-      is_nil(group) ->
-        {:error, :not_found}
-
-      not admin?(group_id, admin_id) ->
-        {:error, :not_admin}
-
-      member?(group_id, target_user_id) ->
-        {:error, :already_member}
-
-      Friends.blocked?(admin_id, target_user_id) ->
-        {:error, :blocked}
-
-      true ->
-        import Ecto.Query
-
-        # If the target user has a pending join request for this group,
-        # auto-approve it instead of creating a separate invite.
-        pending_request =
-          Repo.get_by(GroupJoinRequest,
-            group_id: group_id,
-            user_id: target_user_id,
-            status: "pending"
-          )
-
-        if pending_request do
-          case approve_join_request(admin_id, pending_request.id) do
-            {:ok, _member} -> {:ok, :request_approved}
-            error -> error
-          end
-        else
-          do_create_invite(admin_id, group_id, target_user_id, group)
-        end
-    end
-  end
-
-  defp do_create_invite(admin_id, group_id, target_user_id, group) do
-    import Ecto.Query
-
-    max_invites = GameServer.Limits.get(:max_group_pending_invites)
-
-    pending_count =
-      Repo.one(
-        from(i in GroupInvite,
-          where: i.recipient_id == ^target_user_id and i.status == "pending",
-          select: count(i.id)
-        )
-      ) || 0
-
-    if pending_count >= max_invites do
-      {:error, :too_many_pending_invites}
-    else
-      # Delete any existing invite for this recipient + group (regardless of status)
-      # to avoid unique constraint violations on re-invites after accept/decline
-      from(i in GroupInvite,
-        where: i.recipient_id == ^target_user_id and i.group_id == ^group_id
-      )
-      |> Repo.delete_all()
-
-      sender = GameServer.Accounts.get_user(admin_id)
-      target = GameServer.Accounts.get_user(target_user_id)
-
-      case %GroupInvite{}
-           |> GroupInvite.changeset(%{
-             group_id: group_id,
-             sender_id: admin_id,
-             recipient_id: target_user_id
-           })
-           |> Repo.insert() do
-        {:ok, invite} ->
-          # Send an informational notification (independent of the invite record)
-          GameServer.Notifications.admin_create_notification(admin_id, target_user_id, %{
-            "title" => "Invited to #{group.title}",
-            "content" => "",
-            "metadata" => %{
-              "type" => "group_invite",
-              "group_id" => group_id,
-              "group_name" => group.title,
-              "sender_name" => (sender && sender.display_name) || "",
-              "recipient_name" => (target && target.display_name) || ""
-            }
-          })
-
-          invalidate_invite_cache(admin_id)
-          invalidate_invite_cache(target_user_id)
-
-          {:ok, invite}
-
-        {:error, changeset} ->
-          {:error, changeset}
-      end
-    end
-  end
-
-  @doc """
-  Accept a pending group invite by **invite_id**.
-  The user must be the recipient of the invite.
-  Works for all group types (public, private, hidden).
-  """
-  @spec accept_invite(integer(), integer()) ::
-          {:ok, GroupMember.t()} | {:error, atom()}
-  def accept_invite(user_id, invite_id)
-      when is_integer(user_id) and is_integer(invite_id) do
-    case Repo.get(GroupInvite, invite_id) do
-      %GroupInvite{recipient_id: ^user_id, status: "pending"} = invite ->
-        do_accept_invite(user_id, invite)
-
-      %GroupInvite{recipient_id: ^user_id} ->
-        {:error, :no_invite}
-
-      _other ->
-        {:error, :not_found}
-    end
-  end
-
-  defp do_accept_invite(user_id, invite) do
-    group = get_group(invite.group_id)
-
-    cond do
-      is_nil(group) ->
-        {:error, :not_found}
-
-      member?(group.id, user_id) ->
-        invalidate_invite_cache_sync(user_id)
-        {:error, :already_member}
-
-      true ->
-        group_id = group.id
-
-        case do_add_group_member(user_id, group_id, group, "invite_accept") do
-          {:ok, member} ->
-            finalize_invite_accept(user_id, group_id, group, invite)
-            {:ok, member}
-
-          {:error, :full} = error ->
-            # The group filled up between the invite and acceptance.
-            # Mark the invite as declined, notify the sender, and return the error.
-            handle_invite_capacity_failure(user_id, invite, group)
-            error
-
-          error ->
-            error
-        end
-    end
-  end
-
-  defp handle_invite_capacity_failure(user_id, invite, group) do
-    user = GameServer.Accounts.get_user(user_id)
-    user_name = (user && user.display_name) || ""
-    group_id = group.id
-
-    # Mark the invite as declined so the sender sees it didn't go through
-    from(i in GroupInvite,
-      where:
-        i.recipient_id == ^user_id and i.group_id == ^group_id and
-          i.status == "pending"
-    )
-    |> Repo.update_all(set: [status: "declined", updated_at: DateTime.utc_now()])
-
-    invalidate_invite_cache_sync(user_id)
-    invalidate_invite_cache_sync(invite.sender_id)
-
-    # Retract the original invite notification
-    GameServer.Notifications.delete_notification_by(
-      invite.sender_id,
-      user_id,
-      "Invited to #{group.title}"
-    )
-
-    # Notify the sender that the invite was declined because the group is full
-    GameServer.Notifications.admin_create_notification(
-      user_id,
-      invite.sender_id,
-      %{
-        "title" => "#{user_name} couldn't join #{group.title} — full",
-        "content" => "",
-        "metadata" => %{
-          "type" => "group_invite_declined",
-          "group_id" => group_id,
-          "group_name" => group.title,
-          "user_id" => user_id,
-          "user_name" => user_name,
-          "reason" => "full"
-        }
-      }
-    )
-
-    # Real-time PubSub so the sender's UI updates immediately
-    Phoenix.PubSub.broadcast(
-      GameServer.PubSub,
-      "user:#{invite.sender_id}",
-      {:group_invite_declined, %{group_id: group_id, user_id: user_id, reason: "full"}}
-    )
-  end
-
-  defp finalize_invite_accept(user_id, group_id, group, invite) do
-    # Mark all pending invites for this user + group as accepted
-    from(i in GroupInvite,
-      where:
-        i.recipient_id == ^user_id and i.group_id == ^group_id and
-          i.status == "pending"
-    )
-    |> Repo.update_all(set: [status: "accepted", updated_at: DateTime.utc_now()])
-
-    invalidate_invite_cache_sync(user_id)
-    invalidate_invite_cache_sync(invite.sender_id)
-
-    # Notify the sender that the invite was accepted
-    user = GameServer.Accounts.get_user(user_id)
-    user_name = (user && user.display_name) || ""
-
-    GameServer.Notifications.admin_create_notification(
-      user_id,
-      invite.sender_id,
-      %{
-        "title" => "#{user_name} joined #{group.title}",
-        "content" => "",
-        "metadata" => %{
-          "type" => "group_invite_accepted",
-          "group_id" => group_id,
-          "group_name" => group.title,
-          "user_id" => user_id,
-          "user_name" => user_name
-        }
-      }
-    )
-
-    # Broadcast so the sender's LiveView refreshes
-    Phoenix.PubSub.broadcast(
-      GameServer.PubSub,
-      "user:#{invite.sender_id}",
-      {:group_invite_accepted, %{group_id: group_id}}
-    )
-
-    GameServer.Async.run(fn ->
-      GameServer.Hooks.internal_call(:after_group_join, [user_id, group])
-    end)
-  end
-
-  # Shared helper: acquire advisory lock, check capacity, run hook, insert member.
-  defp do_add_group_member(user_id, group_id, group, source) do
-    Repo.transaction(fn ->
-      AdvisoryLock.lock(:group, group_id)
-
-      if count_group_members(group_id) >= group.max_members do
-        Repo.rollback(:full)
-      end
-
-      max_groups = GameServer.Limits.get(:max_groups_per_user)
-
-      if count_user_group_memberships(user_id) >= max_groups do
-        Repo.rollback(:too_many_groups)
-      end
-
-      case run_before_group_join_hook(user_id, group, %{"source" => source}) do
-        :ok -> insert_group_member(group_id, user_id)
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end)
-  end
-
-  defp insert_group_member(group_id, user_id) do
-    case %GroupMember{}
-         |> GroupMember.changeset(%{group_id: group_id, user_id: user_id, role: "member"})
-         |> Repo.insert() do
-      {:ok, member} ->
-        _ = invalidate_group_cache(group_id)
-        broadcast_group(group_id, {:member_joined, group_id, user_id})
-        member
-
-      {:error, reason} ->
-        Repo.rollback(reason)
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Invitations list
-  # ---------------------------------------------------------------------------
-
-  @doc """
-  List pending group invitations for a user.
-  """
-  @spec list_invitations(integer(), keyword()) :: [map()]
-  def list_invitations(user_id, opts \\ []) when is_integer(user_id) do
-    page = Keyword.get(opts, :page, 1)
-    page_size = Keyword.get(opts, :page_size, 25)
-
-    do_list_invitations(user_id, page, page_size)
-  end
-
-  @decorate cacheable(
-              key:
-                {:group_invites, :list, invite_cache_version(user_id), user_id, page, page_size},
-              opts: [ttl: @invite_cache_ttl_ms]
-            )
-  defp do_list_invitations(user_id, page, page_size) do
-    import Ecto.Query
-
-    from(i in GroupInvite,
-      where: i.recipient_id == ^user_id and i.status == "pending",
-      join: g in assoc(i, :group),
-      join: s in assoc(i, :sender),
-      join: r in assoc(i, :recipient),
-      order_by: [desc: i.inserted_at],
-      offset: ^((page - 1) * page_size),
-      limit: ^page_size,
-      preload: [group: g, sender: s, recipient: r]
-    )
-    |> Repo.all()
-    |> Enum.map(&serialize_group_invite/1)
-  end
-
-  @doc """
-  List group invitations sent by a user.
-  """
-  @spec list_sent_invitations(integer(), keyword()) :: [map()]
-  def list_sent_invitations(user_id, opts \\ []) when is_integer(user_id) do
-    page = Keyword.get(opts, :page, 1)
-    page_size = Keyword.get(opts, :page_size, 25)
-
-    do_list_sent_invitations(user_id, page, page_size)
-  end
-
-  @decorate cacheable(
-              key:
-                {:group_invites, :list_sent, invite_cache_version(user_id), user_id, page,
-                 page_size},
-              opts: [ttl: @invite_cache_ttl_ms]
-            )
-  defp do_list_sent_invitations(user_id, page, page_size) do
-    import Ecto.Query
-
-    from(i in GroupInvite,
-      where: i.sender_id == ^user_id and i.status == "pending",
-      join: g in assoc(i, :group),
-      join: s in assoc(i, :sender),
-      join: r in assoc(i, :recipient),
-      order_by: [desc: i.inserted_at],
-      offset: ^((page - 1) * page_size),
-      limit: ^page_size,
-      preload: [group: g, sender: s, recipient: r]
-    )
-    |> Repo.all()
-    |> Enum.map(&serialize_group_invite/1)
-  end
-
-  @doc """
-  Cancel (delete) a group invitation that the current user sent.
-  Only the sender can cancel their own invitation.
-  """
-  @spec cancel_invite(integer(), integer()) :: :ok | {:error, atom()}
-  def cancel_invite(user_id, invite_id)
-      when is_integer(user_id) and is_integer(invite_id) do
-    case Repo.get(GroupInvite, invite_id) do
-      nil ->
-        {:error, :not_found}
-
-      %GroupInvite{sender_id: ^user_id, status: "pending"} = invite ->
-        Repo.delete(invite)
-        invalidate_invite_cache(user_id)
-        invalidate_invite_cache(invite.recipient_id)
-
-        # Retract the invite notification
-        group = get_group(invite.group_id)
-        group_title = (group && group.title) || ""
-
-        GameServer.Notifications.delete_notification_by(
-          user_id,
-          invite.recipient_id,
-          "Invited to #{group_title}"
-        )
-
-        :ok
-
-      %GroupInvite{status: "pending"} ->
-        {:error, :not_owner}
-
-      _other ->
-        {:error, :not_found}
-    end
-  end
-
-  @doc """
-  Decline a pending group invite by **invite_id**.
-  Only the recipient can decline. The invite is marked as `"declined"`
-  (not deleted) so the sender can see the outcome.
-  """
-  @spec decline_invite(integer(), integer()) :: :ok | {:error, atom()}
-  def decline_invite(user_id, invite_id)
-      when is_integer(user_id) and is_integer(invite_id) do
-    case Repo.get(GroupInvite, invite_id) do
-      %GroupInvite{recipient_id: ^user_id, status: "pending"} = invite ->
-        from(i in GroupInvite,
-          where:
-            i.recipient_id == ^user_id and i.group_id == ^invite.group_id and
-              i.status == "pending"
-        )
-        |> Repo.update_all(set: [status: "declined", updated_at: DateTime.utc_now()])
-
-        invalidate_invite_cache(user_id)
-        invalidate_invite_cache(invite.sender_id)
-
-        # Retract the invite notification for the recipient
-        group = get_group(invite.group_id)
-        group_title = (group && group.title) || ""
-
-        GameServer.Notifications.delete_notification_by(
-          invite.sender_id,
-          user_id,
-          "Invited to #{group_title}"
-        )
-
-        # Notify the sender that the invite was declined
-        user = GameServer.Accounts.get_user(user_id)
-        user_name = (user && user.display_name) || ""
-
-        GameServer.Notifications.admin_create_notification(
-          user_id,
-          invite.sender_id,
-          %{
-            "title" => "#{user_name} declined #{group_title} invite",
-            "content" => "",
-            "metadata" => %{
-              "type" => "group_invite_declined",
-              "group_id" => invite.group_id,
-              "group_name" => group_title,
-              "user_id" => user_id,
-              "user_name" => user_name
-            }
-          }
-        )
-
-        # Notify the sender via PubSub
-        Phoenix.PubSub.broadcast(
-          GameServer.PubSub,
-          "user:#{invite.sender_id}",
-          {:group_invite_declined, %{group_id: invite.group_id, user_id: user_id}}
-        )
-
-        :ok
-
-      _other ->
-        {:error, :not_found}
-    end
-  end
-
-  defp serialize_group_invite(invite) do
-    %{
-      id: invite.id,
-      group_id: invite.group_id,
-      group_name: invite.group.title,
-      sender_id: invite.sender_id,
-      sender_name: invite.sender.display_name || "",
-      recipient_id: invite.recipient_id,
-      recipient_name: invite.recipient.display_name || "",
-      status: invite.status,
-      inserted_at: invite.inserted_at
-    }
-  end
-
-  # ---------------------------------------------------------------------------
   # Group notifications
   # ---------------------------------------------------------------------------
 
@@ -2037,34 +1079,6 @@ defmodule GameServer.Groups do
 
       error ->
         error
-    end
-  end
-
-  defp run_before_group_join_hook(user_id, %Group{} = group, opts)
-       when is_integer(user_id) and is_map(opts) do
-    case Repo.get(GameServer.Accounts.User, user_id) do
-      nil ->
-        {:error, :not_found}
-
-      user ->
-        actor_user_id = Map.get(opts, "actor_user_id") || Map.get(opts, :actor_user_id) || user_id
-
-        hook_opts =
-          Map.merge(opts, %{
-            "actor_user_id" => actor_user_id,
-            "joining_user_id" => user_id,
-            "group_id" => group.id,
-            "group_name" => group.title,
-            "group_type" => group.type,
-            "group_metadata" => group.metadata || %{}
-          })
-
-        case GameServer.Hooks.internal_call(:before_group_join, [user, group, hook_opts],
-               caller: actor_user_id
-             ) do
-          {:ok, _} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
     end
   end
 
@@ -2184,4 +1198,76 @@ defmodule GameServer.Groups do
       attrs
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Join requests — implemented in GameServer.Groups.JoinRequests
+  # ---------------------------------------------------------------------------
+
+  @doc "Request to join a private group. Creates a pending join request."
+  @spec request_join(integer(), integer()) :: {:ok, GroupJoinRequest.t()} | {:error, atom()}
+  defdelegate request_join(user_id, group_id), to: JoinRequests
+
+  @doc "List pending join requests for a group (admin only)."
+  @spec list_join_requests(integer(), integer(), keyword()) ::
+          {:ok, [GroupJoinRequest.t()]} | {:error, atom()}
+  defdelegate list_join_requests(admin_id, group_id, opts \\ []), to: JoinRequests
+
+  @doc "Count pending join requests for a group."
+  @spec count_join_requests(integer()) :: non_neg_integer()
+  defdelegate count_join_requests(group_id), to: JoinRequests
+
+  @doc "Approve a pending join request. Admin only."
+  @spec approve_join_request(integer(), integer()) :: {:ok, GroupMember.t()} | {:error, atom()}
+  defdelegate approve_join_request(admin_id, request_id), to: JoinRequests
+
+  @doc "Reject a pending join request. Admin only."
+  @spec reject_join_request(integer(), integer()) ::
+          {:ok, GroupJoinRequest.t()} | {:error, atom()}
+  defdelegate reject_join_request(admin_id, request_id), to: JoinRequests
+
+  @doc "Cancel (delete) a pending join request. Only the requesting user can cancel."
+  @spec cancel_join_request(integer(), integer()) ::
+          {:ok, GroupJoinRequest.t()} | {:error, atom()}
+  defdelegate cancel_join_request(user_id, request_id), to: JoinRequests
+
+  @doc "List pending join requests sent by a user."
+  @spec list_user_pending_requests(integer()) :: [GroupJoinRequest.t()]
+  defdelegate list_user_pending_requests(user_id), to: JoinRequests
+
+  # ---------------------------------------------------------------------------
+  # Invites — implemented in GameServer.Groups.Invites
+  # ---------------------------------------------------------------------------
+
+  @doc "Invite a user to a group (see `GameServer.Groups.Invites.invite_to_group/3`)."
+  @spec invite_to_group(integer(), integer(), integer()) ::
+          {:ok, GameServer.Groups.GroupInvite.t()} | {:ok, :request_approved} | {:error, atom()}
+  defdelegate invite_to_group(admin_id, group_id, target_user_id), to: Invites
+
+  @doc "Accept a pending group invite by invite id (recipient only)."
+  @spec accept_invite(integer(), integer()) :: {:ok, GroupMember.t()} | {:error, atom()}
+  defdelegate accept_invite(user_id, invite_id), to: Invites
+
+  @doc "Decline a pending group invite by invite id (recipient only)."
+  @spec decline_invite(integer(), integer()) :: :ok | {:error, atom()}
+  defdelegate decline_invite(user_id, invite_id), to: Invites
+
+  @doc "Cancel a group invitation the current user sent."
+  @spec cancel_invite(integer(), integer()) :: :ok | {:error, atom()}
+  defdelegate cancel_invite(user_id, invite_id), to: Invites
+
+  @doc "List pending group invitations for a user."
+  @spec list_invitations(integer(), keyword()) :: [map()]
+  defdelegate list_invitations(user_id, opts \\ []), to: Invites
+
+  @doc "List group invitations sent by a user."
+  @spec list_sent_invitations(integer(), keyword()) :: [map()]
+  defdelegate list_sent_invitations(user_id, opts \\ []), to: Invites
+
+  @doc "Count pending invitations for a user."
+  @spec count_invitations(integer()) :: non_neg_integer()
+  defdelegate count_invitations(user_id), to: Invites
+
+  @doc "Count group invitations sent by a user."
+  @spec count_sent_invitations(integer()) :: non_neg_integer()
+  defdelegate count_sent_invitations(user_id), to: Invites
 end

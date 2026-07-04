@@ -122,7 +122,8 @@ defmodule GameServer.Payments do
 
   @spec create_purchase(User.t(), ProviderProduct.t(), map()) ::
           {:ok, Purchase.t()} | {:error, Ecto.Changeset.t()}
-  def create_purchase(%User{id: user_id}, %ProviderProduct{} = provider_product, attrs \\ %{}) do
+  def create_purchase(user, %ProviderProduct{} = provider_product, attrs \\ %{}) do
+    user_id = user.id
     provider_product = Repo.preload(provider_product, :product)
     attrs = normalize_params(attrs)
     quantity = parse_positive_int(attrs["quantity"], 1)

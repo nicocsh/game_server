@@ -26,8 +26,31 @@ defmodule GameServerWeb.RateLimit do
   @spec hit(String.t(), pos_integer(), pos_integer()) ::
           {:allow, non_neg_integer()} | {:deny, non_neg_integer()}
   def hit(key, scale, limit) do
-    backend().hit(key, scale, limit)
+    case backend().hit(key, scale, limit) do
+      {:allow, _count} = result ->
+        result
+
+      {:deny, _retry_after} = result ->
+        :telemetry.execute(
+          [:game_server, :rate_limit, :deny],
+          %{count: 1},
+          %{scope: scope_of(key)}
+        )
+
+        result
+    end
   end
+
+  # Bucket keys look like "auth:1.2.3.4" / "general:..." / "ws:..." — the
+  # part before the first colon is the scope used for metrics.
+  defp scope_of(key) when is_binary(key) do
+    case String.split(key, ":", parts: 2) do
+      [scope, _rest] -> scope
+      _ -> "unknown"
+    end
+  end
+
+  defp scope_of(_key), do: "unknown"
 
   @doc "Returns the currently configured backend module."
   @spec backend() :: module()

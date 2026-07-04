@@ -21,7 +21,14 @@ defmodule GameServerWeb.NotificationsEdgeCasesTest do
     b = AccountsFixtures.user_fixture()
     {:ok, f} = Friends.create_request(a.id, b.id)
     {:ok, _} = Friends.accept_friend_request(f.id, b)
+    purge_notifications()
     {a, b}
+  end
+
+  # Friendship setup itself creates friend_request/friend_accepted
+  # notifications; clear them so tests assert only on what they create.
+  defp purge_notifications do
+    GameServer.Repo.delete_all(GameServer.Notifications.Notification)
   end
 
   # ---------------------------------------------------------------------------
@@ -98,6 +105,7 @@ defmodule GameServerWeb.NotificationsEdgeCasesTest do
       d = AccountsFixtures.user_fixture()
       {:ok, f_cd} = Friends.create_request(c.id, d.id)
       {:ok, _} = Friends.accept_friend_request(f_cd.id, d)
+      purge_notifications()
 
       # a -> b notification
       {:ok, _} =
@@ -253,6 +261,7 @@ defmodule GameServerWeb.NotificationsEdgeCasesTest do
       c = AccountsFixtures.user_fixture()
       {:ok, f_ac} = Friends.create_request(a.id, c.id)
       {:ok, _} = Friends.accept_friend_request(f_ac.id, c)
+      purge_notifications()
 
       # Warm both caches
       assert Notifications.count_notifications(b.id) == 0

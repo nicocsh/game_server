@@ -461,6 +461,44 @@ defmodule GameServerWeb.AdminLive.Index do
                   <div>Active entitlements: {@payments_stats.active_entitlements}</div>
                 </div>
               </div>
+
+              <%!-- 13. Cache & limits (since boot) --%>
+              <div class="card bg-base-100 p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="text-sm font-semibold">Cache &amp; limits</div>
+                  <span class="text-xs text-base-content/50">since boot</span>
+                </div>
+                <div class="text-2xl font-bold">
+                  {cache_hit_rate_label(@cache_stats)}
+                  <span class="text-sm font-normal text-base-content/60 ml-1">hit rate</span>
+                </div>
+                <div class="text-xs text-base-content/60 mt-2 space-y-1">
+                  <div
+                    :for={row <- Enum.take(@cache_stats.cache, 6)}
+                    class="flex justify-between"
+                  >
+                    <span>{row.prefix}</span>
+                    <span class="font-mono">
+                      {row.hits}/{row.hits + row.misses} ({round(row.hit_rate * 100)}%)
+                    </span>
+                  </div>
+                  <div class="flex justify-between border-t border-base-300 pt-1 mt-1">
+                    <span>Rate-limit denials</span>
+                    <span class="font-mono">
+                      {@cache_stats.rate_limit_denies |> Map.values() |> Enum.sum()}
+                    </span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Async overloads</span>
+                    <span class={[
+                      "font-mono",
+                      @cache_stats.async_overloads > 0 && "text-warning"
+                    ]}>
+                      {@cache_stats.async_overloads}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -590,6 +628,7 @@ defmodule GameServerWeb.AdminLive.Index do
        users_active_7d: r.users_active_7d,
        users_active_30d: r.users_active_30d,
        users_unactivated: r.users_unactivated,
+       cache_stats: GameServer.Cache.Stats.snapshot(),
        dev_routes?: @dev_routes?
      )}
   end
@@ -614,7 +653,8 @@ defmodule GameServerWeb.AdminLive.Index do
        geo_total: geo.total_all,
        geo_total_1h: geo.total_1h,
        geo_stats_1h: geo.stats_1h,
-       log_recent_errors: safe_log_recent_errors()
+       log_recent_errors: safe_log_recent_errors(),
+       cache_stats: GameServer.Cache.Stats.snapshot()
      )}
   end
 
@@ -624,7 +664,16 @@ defmodule GameServerWeb.AdminLive.Index do
   defp schedule_live_refresh, do: Process.send_after(self(), :refresh_live_stats, 5_000)
 
   defp build_rate_limit_stats do
-    :ets.tab2list(GameServerWeb.RateLimit)
+    # Counter inspection only works for the ETS backend; with the Redis
+    # backend the "Cache & limits" card (deny telemetry) covers this.
+    case GameServerWeb.RateLimit.backend() do
+      GameServerWeb.RateLimit.ETS -> build_rate_limit_stats(GameServerWeb.RateLimit.ETS)
+      _other -> %{banned: 0, limited: 0}
+    end
+  end
+
+  defp build_rate_limit_stats(table) do
+    :ets.tab2list(table)
     |> Enum.reduce(%{banned: 0, limited: 0}, fn
       {{key, _window}, count, _expiry}, acc when is_binary(key) ->
         cond do
@@ -645,6 +694,15 @@ defmodule GameServerWeb.AdminLive.Index do
     end)
   rescue
     _ -> %{banned: 0, limited: 0}
+  end
+
+  defp cache_hit_rate_label(%{cache: []}), do: "—"
+
+  defp cache_hit_rate_label(%{cache: rows}) do
+    hits = Enum.sum_by(rows, & &1.hits)
+    total = hits + Enum.sum_by(rows, & &1.misses)
+
+    if total > 0, do: "#{round(hits / total * 100)}%", else: "—"
   end
 
   defp format_number(n) when is_integer(n) and n >= 1_000_000 do

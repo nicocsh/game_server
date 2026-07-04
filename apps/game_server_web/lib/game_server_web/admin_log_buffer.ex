@@ -1,11 +1,22 @@
 defmodule GameServerWeb.AdminLogBuffer do
-  @moduledoc false
+  @moduledoc """
+  In-memory ring buffer of recent log entries for the admin dashboard.
+
+  Entries are written directly into a public ETS `ordered_set` from the
+  calling (logger handler) process, so logging never serializes through this
+  GenServer — under a log storm writers stay concurrent and reads stay cheap.
+  The GenServer only owns the table and trims it periodically.
+  """
 
   use GenServer
 
   @name __MODULE__
+  @table __MODULE__
   @topic "admin_logs"
   @max_entries 5000
+  # Trim in batches instead of per insert; the buffer may briefly exceed
+  # @max_entries by up to this amount.
+  @trim_every 500
 
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, %{}, name: @name)
@@ -13,75 +24,95 @@ defmodule GameServerWeb.AdminLogBuffer do
 
   def topic, do: @topic
 
+  @doc """
+  Appends a log entry. Called from the logger handler in the logging
+  process — writes straight to ETS, no GenServer round-trip.
+  """
   def put(entry) when is_map(entry) do
-    GenServer.cast(@name, {:put, entry})
+    if :ets.whereis(@table) != :undefined do
+      entry = normalize_entry(entry)
+      seq = :ets.update_counter(@table, :seq, 1, {:seq, 0})
+      :ets.insert(@table, {seq, entry})
+
+      if rem(seq, @trim_every) == 0 do
+        GenServer.cast(@name, :trim)
+      end
+
+      Phoenix.PubSub.broadcast(GameServer.PubSub, @topic, {:admin_log, entry})
+    end
+
+    :ok
   end
 
+  @doc "Returns buffered entries, newest first, with optional filters."
   def list(opts \\ []) do
     module_filter = Keyword.get(opts, :module)
     level_filter = Keyword.get(opts, :level)
     limit = Keyword.get(opts, :limit, @max_entries)
 
-    GenServer.call(@name, {:list, module_filter, level_filter, limit})
+    entries()
+    |> maybe_filter_module(module_filter)
+    |> maybe_filter_level(level_filter)
+    |> Enum.take(limit)
   end
 
   @doc "Returns a map of level => count for all buffered entries."
   def count_by_level do
-    GenServer.call(@name, :count_by_level)
+    entries()
+    |> Enum.group_by(& &1.level)
+    |> Map.new(fn {level, entries} -> {level, length(entries)} end)
   end
 
   @doc "Returns the count of error/critical/alert/emergency entries in the last `seconds` seconds."
   def count_recent_errors(seconds \\ 3600) do
-    GenServer.call(@name, {:count_recent_errors, seconds})
+    cutoff = DateTime.add(DateTime.utc_now(), -seconds, :second)
+    error_levels = [:error, :critical, :alert, :emergency]
+
+    Enum.count(entries(), fn entry ->
+      entry.level in error_levels and DateTime.compare(entry.timestamp, cutoff) == :gt
+    end)
   end
 
   @impl true
   def init(_) do
+    _ =
+      :ets.new(@table, [
+        :ordered_set,
+        :public,
+        :named_table,
+        write_concurrency: true,
+        read_concurrency: true
+      ])
+
     _ = GameServerWeb.AdminLogHandler.install()
-    {:ok, %{entries: []}}
+    {:ok, %{}}
   end
 
   @impl true
-  def handle_cast({:put, entry}, state) do
-    entry = normalize_entry(entry)
+  def handle_cast(:trim, state) do
+    case :ets.lookup(@table, :seq) do
+      [{:seq, seq}] when seq > @max_entries ->
+        # Delete all numeric keys at or below the cutoff (`:seq` is an atom
+        # key and sorts after integers in an ordered_set, so it is untouched).
+        cutoff = seq - @max_entries
 
-    entries = [entry | state.entries] |> Enum.take(@max_entries)
+        :ets.select_delete(@table, [
+          {{:"$1", :_}, [{:is_integer, :"$1"}, {:"=<", :"$1", cutoff}], [true]}
+        ])
 
-    Phoenix.PubSub.broadcast(GameServer.PubSub, @topic, {:admin_log, entry})
+      _ ->
+        :ok
+    end
 
-    {:noreply, %{state | entries: entries}}
+    {:noreply, state}
   end
 
-  @impl true
-  def handle_call({:list, module_filter, level_filter, limit}, _from, state) do
-    entries =
-      state.entries
-      |> maybe_filter_module(module_filter)
-      |> maybe_filter_level(level_filter)
-      |> Enum.take(limit)
-
-    {:reply, entries, state}
-  end
-
-  def handle_call(:count_by_level, _from, state) do
-    counts =
-      state.entries
-      |> Enum.group_by(& &1.level)
-      |> Map.new(fn {level, entries} -> {level, length(entries)} end)
-
-    {:reply, counts, state}
-  end
-
-  def handle_call({:count_recent_errors, seconds}, _from, state) do
-    cutoff = DateTime.add(DateTime.utc_now(), -seconds, :second)
-    error_levels = [:error, :critical, :alert, :emergency]
-
-    count =
-      Enum.count(state.entries, fn entry ->
-        entry.level in error_levels and DateTime.compare(entry.timestamp, cutoff) == :gt
-      end)
-
-    {:reply, count, state}
+  # Newest first: descending key order, skipping the :seq counter row.
+  defp entries do
+    @table
+    |> :ets.select_reverse([{{:"$1", :"$2"}, [{:is_integer, :"$1"}], [:"$2"]}])
+  rescue
+    ArgumentError -> []
   end
 
   defp maybe_filter_module(entries, nil), do: entries

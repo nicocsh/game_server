@@ -19,7 +19,14 @@ defmodule GameServerWeb.UserChannelNotificationsTest do
     b = AccountsFixtures.user_fixture() |> AccountsFixtures.set_password()
     {:ok, f} = Friends.create_request(a.id, b.id)
     {:ok, _} = Friends.accept_friend_request(f.id, b)
+    purge_notifications()
     {a, b}
+  end
+
+  # Friendship setup itself creates friend_request/friend_accepted
+  # notifications; clear them so tests assert only on what they create.
+  defp purge_notifications do
+    GameServer.Repo.delete_all(GameServer.Notifications.Notification)
   end
 
   test "user channel pushes existing notifications on join" do

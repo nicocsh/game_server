@@ -128,7 +128,7 @@ defmodule GameServerWeb.Api.V1.UserController do
         count: count,
         total_count: total_count,
         total_pages: total_pages,
-        has_more: count == page_size
+        has_more: page < total_pages
       }
     })
   end
