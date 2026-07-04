@@ -1,5 +1,7 @@
 # July 2026
 
+- [fixed] Application boot no longer depends on the database being reachable/migrated: the persisted IP-ban load runs after startup and retries with error logging instead of crash-looping the app (e.g. during rolling restarts); CI spec-generation jobs also migrate before booting.
+
 - [added] **Data retention**: old chat messages, notifications, and payment provider events are pruned periodically, configurable via `RETENTION_CHAT_DAYS` / `RETENTION_NOTIFICATIONS_DAYS` / `RETENTION_PAYMENT_EVENTS_DAYS` (unset keeps forever); expired IP bans are always cleaned up.
 - [added] **Cache & limits observability**: hit/miss counters per cache prefix, rate-limit denials, and async overloads on the admin dashboard and as Prometheus metrics (`game_server_cache_reads_total`, `game_server_rate_limit_denies_total`, `game_server_async_overload_total`).
 - [changed] Presence writes only on real online/offline transitions — reconnects and extra tabs no longer write to the `users` table, and `after_user_online`/`after_user_offline` hooks fire once per session instead of once per socket.

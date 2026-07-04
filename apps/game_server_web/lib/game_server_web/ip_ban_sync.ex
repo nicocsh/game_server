@@ -3,15 +3,25 @@ defmodule GameServerWeb.IpBanSync do
   Keeps the node-local IP-ban ETS table in sync with the database and the
   other app instances.
 
-  At boot it loads persisted bans (`GameServer.IpBans`) into ETS; afterwards
-  it applies ban/unban events broadcast by other instances on the
+  After init it loads persisted bans (`GameServer.IpBans`) into ETS;
+  afterwards it applies ban/unban events broadcast by other instances on the
   `GameServerWeb.Plugs.IpBan.topic/0` PubSub topic. Events originating on
   this node are skipped — the plug already applied them locally.
+
+  The initial load runs in `handle_continue` and retries on failure instead
+  of failing the boot: `init/1` must not couple application startup to the
+  database being reachable (e.g. during rolling restarts). Every failed
+  attempt logs an error, so an unmigrated `ip_bans` table stays loudly
+  visible without crash-looping the whole application.
   """
 
   use GenServer
 
+  require Logger
+
   alias GameServerWeb.Plugs.IpBan
+
+  @retry_ms :timer.seconds(10)
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -19,10 +29,12 @@ defmodule GameServerWeb.IpBanSync do
 
   @impl true
   def init(_opts) do
-    IpBan.load_persisted()
     Phoenix.PubSub.subscribe(GameServer.PubSub, IpBan.topic())
-    {:ok, %{}}
+    {:ok, %{loaded?: false}, {:continue, :load_persisted}}
   end
+
+  @impl true
+  def handle_continue(:load_persisted, state), do: {:noreply, attempt_load(state)}
 
   @impl true
   def handle_info({:ip_ban, event, ip, expires_at_utc, from_node}, state) do
@@ -33,5 +45,23 @@ defmodule GameServerWeb.IpBanSync do
     {:noreply, state}
   end
 
+  def handle_info(:retry_load, state), do: {:noreply, attempt_load(state)}
+
   def handle_info(_message, state), do: {:noreply, state}
+
+  defp attempt_load(%{loaded?: true} = state), do: state
+
+  defp attempt_load(state) do
+    IpBan.load_persisted()
+    %{state | loaded?: true}
+  rescue
+    e ->
+      Logger.error(
+        "could not load persisted IP bans (retrying in #{div(@retry_ms, 1000)}s): " <>
+          Exception.message(e)
+      )
+
+      Process.send_after(self(), :retry_load, @retry_ms)
+      state
+  end
 end

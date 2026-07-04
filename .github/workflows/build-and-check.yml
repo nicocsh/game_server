@@ -377,6 +377,11 @@ jobs:
         run: |
           mix deps.get
 
+      - name: Prepare database (app boot requires a migrated DB)
+        run: |
+          mix ecto.create --quiet -r GameServer.Repo
+          mix db.migrate
+
       - name: Regenerate OpenAPI JSON
         run: |
           mix openapi.spec.json --spec GameServerWeb.ApiSpec --filename clients/javascript/openapi.json --pretty=true
@@ -455,6 +460,11 @@ jobs:
         working-directory: .
         run: |
           mix deps.get
+
+      - name: Prepare database (app boot requires a migrated DB)
+        run: |
+          mix ecto.create --quiet -r GameServer.Repo
+          mix db.migrate
 
       - name: Run Godot generation script
         env:
