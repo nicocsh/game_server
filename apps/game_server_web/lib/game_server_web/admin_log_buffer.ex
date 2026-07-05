@@ -48,11 +48,13 @@ defmodule GameServerWeb.AdminLogBuffer do
   def list(opts \\ []) do
     module_filter = Keyword.get(opts, :module)
     level_filter = Keyword.get(opts, :level)
+    query_filter = Keyword.get(opts, :query)
     limit = Keyword.get(opts, :limit, @max_entries)
 
     entries()
     |> maybe_filter_module(module_filter)
     |> maybe_filter_level(level_filter)
+    |> maybe_filter_query(query_filter)
     |> Enum.take(limit)
   end
 
@@ -85,6 +87,7 @@ defmodule GameServerWeb.AdminLogBuffer do
       ])
 
     _ = GameServerWeb.AdminLogHandler.install()
+    _ = GameServerWeb.FileLogHandler.install()
     {:ok, %{}}
   end
 
@@ -148,6 +151,26 @@ defmodule GameServerWeb.AdminLogBuffer do
     Enum.filter(entries, fn entry -> entry.level == atom_level end)
   rescue
     _ -> entries
+  end
+
+  defp maybe_filter_query(entries, nil), do: entries
+  defp maybe_filter_query(entries, ""), do: entries
+
+  defp maybe_filter_query(entries, query) when is_binary(query) do
+    case String.trim(query) do
+      "" ->
+        entries
+
+      trimmed ->
+        needle = String.downcase(trimmed)
+
+        Enum.filter(entries, fn entry ->
+          entry.message
+          |> to_string()
+          |> String.downcase()
+          |> String.contains?(needle)
+        end)
+    end
   end
 
   defp normalize_entry(entry) do

@@ -74,6 +74,14 @@ defmodule GameServerWeb.AdminLive.Logs do
             class="input input-sm flex-1"
             phx-debounce="300"
           />
+          <input
+            id="log-search"
+            name="query"
+            value={@search_query}
+            placeholder="Search message text (eg tournament, user_id=42)"
+            class="input input-sm flex-1"
+            phx-debounce="300"
+          />
           <div class="flex items-center gap-2">
             <label class="label cursor-pointer gap-2">
               <input
@@ -153,13 +161,14 @@ defmodule GameServerWeb.AdminLive.Logs do
     end
 
     level_counts = safe_count_by_level()
-    logs = AdminLogBuffer.list(module: "", level: "all", limit: @page_size)
+    logs = AdminLogBuffer.list(module: "", level: "all", query: "", limit: @page_size)
 
     {:ok,
      assign(socket,
        logs: logs,
        level_filter: "all",
        module_filter: "",
+       search_query: "",
        auto_scroll: true,
        level_counts: level_counts,
        total_buffered: Enum.reduce(level_counts, 0, fn {_, v}, acc -> acc + v end),
@@ -214,6 +223,7 @@ defmodule GameServerWeb.AdminLive.Logs do
       AdminLogBuffer.list(
         module: socket.assigns.module_filter,
         level: level,
+        query: socket.assigns.search_query,
         limit: @page_size
       )
 
@@ -222,29 +232,33 @@ defmodule GameServerWeb.AdminLive.Logs do
 
   def handle_event("update_filters", params, socket) do
     module = Map.get(params, "module", "")
+    query = Map.get(params, "query", "")
     auto_scroll = Map.get(params, "auto_scroll") == "true"
 
     logs =
       AdminLogBuffer.list(
         module: module,
         level: socket.assigns.level_filter,
+        query: query,
         limit: @page_size
       )
 
     {:noreply,
      assign(socket,
        module_filter: module,
+       search_query: query,
        auto_scroll: auto_scroll,
        logs: logs
      )}
   end
 
   def handle_event("clear_filters", _params, socket) do
-    logs = AdminLogBuffer.list(module: "", level: "all", limit: @page_size)
+    logs = AdminLogBuffer.list(module: "", level: "all", query: "", limit: @page_size)
 
     {:noreply,
      assign(socket,
        module_filter: "",
+       search_query: "",
        level_filter: "all",
        logs: logs
      )}
@@ -269,7 +283,19 @@ defmodule GameServerWeb.AdminLive.Logs do
           String.contains?(mod_str, filter)
       end
 
-    level_ok? and module_ok?
+    query_ok? =
+      case String.trim(assigns.search_query) do
+        "" ->
+          true
+
+        needle ->
+          entry.message
+          |> to_string()
+          |> String.downcase()
+          |> String.contains?(String.downcase(needle))
+      end
+
+    level_ok? and module_ok? and query_ok?
   end
 
   defp entry_id(entry) do
