@@ -28,8 +28,6 @@ defmodule GameServer.Hooks.PluginManager do
   @type plugin_name :: String.t()
   @type plugin_app :: atom()
 
-  @default_plugins_dir Path.expand("modules/plugins")
-
   @timeout_ms 60_000
   @default_slow_hook_threshold_ms 200.0
 
@@ -152,7 +150,7 @@ defmodule GameServer.Hooks.PluginManager do
 
   @spec plugins_dir() :: String.t()
   def plugins_dir do
-    System.get_env("GAME_SERVER_PLUGINS_DIR") || @default_plugins_dir
+    System.get_env("GAME_SERVER_PLUGINS_DIR") || Path.expand("modules/plugins")
   end
 
   # GenServer

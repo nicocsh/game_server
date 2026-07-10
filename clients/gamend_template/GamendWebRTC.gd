@@ -195,7 +195,9 @@ func _process(_delta: float) -> void:
 
 
 ## Handle signaling events from the server via the Phoenix channel.
-func _on_channel_event(event: String, payload: Dictionary, _status, _topic: String) -> void:
+# PhoenixChannel.on_event emits (event, payload, status) — connecting a
+# 4-arg handler to it errors at emit time.
+func _on_channel_event(event: String, payload: Dictionary, _status) -> void:
 	match event:
 		"webrtc:answer":
 			if _peer and payload.has("sdp") and payload.has("type"):

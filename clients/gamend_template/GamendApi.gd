@@ -550,6 +550,11 @@ func is_realtime_connected() -> bool:
 func listen_to_user():
 	_realtime.add_channel("user:" + str(int(_user_id)))
 
+## The current user's realtime channel (joined on first call). Used for
+## WebRTC signaling (see GamendWebRTC).
+func get_user_channel() -> PhoenixChannel:
+	return _realtime.add_channel("user:" + str(int(_user_id)))
+
 func listen_to_lobby():
 	_realtime.add_channel("lobby:" + str(int(_lobby_id)))
 
