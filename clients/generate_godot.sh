@@ -173,6 +173,16 @@ find "$OUT_DIR" -type f -iname "*.gd" -print0 | xargs -0 -r perl -0777 -pe "s/Ga
 # headers_for_godot, "" if body_serialized == "null" else body_serialized
 find "$OUT_DIR" -type f -iname "*.gd" -print0 | xargs -0 -r perl -0777 -pe 's/headers_for_godot, body_serialized/headers_for_godot, "" if body_serialized == "null" else body_serialized/g' -i
 
+# General model-reference fix (replaces the per-model snake_case -> PascalCase
+# lines above — you no longer need to add one per new model).
+#
+# The gdscript generator calls a model's static factory as
+#   <snake_name>.bzz_denormalize_single/multiple(...)
+# but declares the class in PascalCase (class_name FooBarResponse), so the
+# lower-cased reference never resolves ("Identifier ... not declared").
+# PascalCase the identifier in every such call: split on "_", capitalize each
+# segment, and re-join. This handles any current or future model automatically.
+find "$OUT_DIR" -type f -iname "*.gd" -print0 | xargs -0 -r perl -0777 -i -pe 's{\b([a-z][a-z0-9]*(?:_[a-z0-9]+)+)(\.bzz_denormalize_(?:single|multiple))\b}{join("", map { ucfirst } split(/_/, $1)) . $2}ge'
 
 echo "Post-processing complete."
 

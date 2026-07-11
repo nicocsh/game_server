@@ -59,7 +59,7 @@ func shutdown() -> void:
 func add_channel(topic: String):
 	if _channels.has(topic):
 		return _channels[topic]
-	var channel = socket.channel(topic, _socket_params(), null, _socket_params)
+	var channel = socket.channel(topic, _socket_params(), null)
 	_channels[topic] = channel
 	channel.on_close.connect(_channel_on_close.bind(channel.get_topic()))
 	channel.on_event.connect(_channel_on_event.bind(channel.get_topic()))

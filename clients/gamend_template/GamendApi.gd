@@ -9,6 +9,10 @@ signal user_updated(user: Dictionary)
 signal kv_updated(payload: Dictionary)
 signal kv_deleted(payload: Dictionary)
 
+## Network request lifecycle (emitted around every HTTP/WS API call).
+signal network_request_succeeded()
+signal network_request_failed(message: String)
+
 ## Lobby realtime events
 signal lobby_updated(lobby: Dictionary)
 signal lobby_member_joined(payload: Dictionary)   ## {user_id}
