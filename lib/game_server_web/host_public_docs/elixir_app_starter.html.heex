@@ -36,6 +36,28 @@
     </h2>
 
     <div class="space-y-6">
+      <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm">
+        <p class="font-semibold text-base-content">
+          {doc_text("Ready-made starter repository")}
+        </p>
+        <p class="mt-2 text-base-content/80">
+          {doc_text(
+            "Instead of assembling this by hand, start from the maintained example repository:"
+          )}
+          <a
+            href="https://github.com/appsinacup/gamend_starter"
+            class="link link-primary"
+            target="_blank"
+            rel="noreferrer"
+          >github.com/appsinacup/gamend_starter</a>. {doc_text(
+            "Clone it, run it locally with mix dev.start, then customize."
+          )} {doc_text("To deploy it, follow the")} <a
+            href="https://gamend.appsinacup.com/docs/setup#deployment"
+            class="link link-primary"
+          >{doc_text("Deployment")}</a> {doc_text("guide on this page.")}
+        </p>
+      </div>
+
       <div class="step">
         <h3 class="text-lg font-semibold mb-3">{doc_text("Recommended project shape")}</h3>
         <div class="ml-8 space-y-3">
