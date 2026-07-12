@@ -21,47 +21,41 @@ defmodule GameServer.Hooks.PluginBuilder do
           steps: [step_result()]
         }
 
-  @spec sources_dir() :: String.t() | nil
+  @spec sources_dir() :: String.t()
   def sources_dir do
-    System.get_env("GAME_SERVER_PLUGINS_DIR")
+    # Mirror the loader's default (GameServer.Hooks.PluginManager.plugins_dir/0)
+    # so the builder always knows where plugin sources live, even when the
+    # GAME_SERVER_PLUGINS_DIR env var is unset.
+    System.get_env("GAME_SERVER_PLUGINS_DIR") || Path.expand("modules/plugins")
   end
 
   @spec list_buildable_plugins() :: [String.t()]
   def list_buildable_plugins do
-    case sources_dir() do
-      dir when is_binary(dir) ->
-        with true <- File.dir?(dir),
-             {:ok, entries} <- File.ls(dir) do
-          entries
-          |> Enum.map(&Path.join(dir, &1))
-          |> Enum.filter(fn p ->
-            File.dir?(p) and File.exists?(Path.join(p, "mix.exs"))
-          end)
-          |> Enum.map(&Path.basename/1)
-          |> Enum.sort()
-        else
-          _ -> []
-        end
+    dir = sources_dir()
 
-      _ ->
-        []
+    with true <- File.dir?(dir),
+         {:ok, entries} <- File.ls(dir) do
+      entries
+      |> Enum.map(&Path.join(dir, &1))
+      |> Enum.filter(fn p ->
+        File.dir?(p) and File.exists?(Path.join(p, "mix.exs"))
+      end)
+      |> Enum.map(&Path.basename/1)
+      |> Enum.sort()
+    else
+      _ -> []
     end
   end
 
   @spec build(String.t()) :: {:ok, build_result()} | {:error, term()}
   def build(plugin_name) when is_binary(plugin_name) do
-    case sources_dir() do
-      nil ->
-        return_error(:plugin_sources_dir_unset)
+    source_dir = sources_dir()
+    plugin_dir = Path.join(source_dir, plugin_name)
 
-      source_dir ->
-        plugin_dir = Path.join(source_dir, plugin_name)
-
-        if File.exists?(Path.join(plugin_dir, "mix.exs")) do
-          run_build_steps(plugin_name, source_dir, plugin_dir)
-        else
-          return_error({:missing_mix_project, plugin_dir})
-        end
+    if File.exists?(Path.join(plugin_dir, "mix.exs")) do
+      run_build_steps(plugin_name, source_dir, plugin_dir)
+    else
+      return_error({:missing_mix_project, plugin_dir})
     end
   rescue
     e ->
