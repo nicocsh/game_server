@@ -8,7 +8,7 @@ Game + Backend = Gamend
 
 [Discord](https://discord.com/invite/v649emcpAu) | [Guides](https://gamend.appsinacup.com/docs/setup) | [API Docs](https://gamend.appsinacup.com/api/docs) | [Elixir Docs](https://appsinacup.github.io/game_server/) | [Starter Template](https://github.com/appsinacup/gamend_starter)
 
-## Features & Payments
+## Features
 
 - **Auth** — Email/password, magic link, OAuth (Discord, Google, Apple, Facebook, Steam), JWT API tokens
 - **Users** — Profiles, metadata, device tokens, account lifecycle
@@ -31,10 +31,19 @@ Game + Backend = Gamend
 - [Godot SDK](https://godotengine.org/asset-library/asset/4510)
 - [Elixir SDK](sdk/) — Stub modules for IDE autocomplete in custom hooks
 
-## Quick Start
+## Run Locally
+
+### Prerequisites
+
+- **Elixir 1.20 & Erlang/OTP 29** — see [`.tool-versions`](.tool-versions); with [asdf](https://asdf-vm.com/) just run `asdf install`
+- **Rust** ([rustup](https://rustup.rs/)) — required to build the WebRTC native dependency (`ex_sctp`)
+- **PostgreSQL** — optional. Dev uses SQLite by default; set `POSTGRES_*` or `DATABASE_URL` in `.env` to use Postgres instead.
+
+### First run
 
 ```sh
 cp .env.example .env
+mix setup
 mix dev.start
 ```
 
