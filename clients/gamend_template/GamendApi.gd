@@ -258,6 +258,7 @@ func _call_api(api: ApiApiBeeClient, method_name: String, params: Array = []) ->
 			ERR_TIMEOUT
 		)
 		debug_message.emit("err", "network", result.error.message)
+		network_request_failed.emit(result.error.message)
 		result.finished.emit(result)
 	if http_request_timeout_sec > 0.0:
 		var timeout_timer := _create_request_timeout_timer(http_request_timeout_sec)
@@ -273,6 +274,7 @@ func _call_api(api: ApiApiBeeClient, method_name: String, params: Array = []) ->
 			_release_http_client(client_idx)
 			result.response = response
 			_verify_login_result(method_name, response.data)
+			network_request_succeeded.emit()
 			if enable_logs:
 				print(api._bzz_name, " ", method_name, " ", _format_log_body(response.body), " t: ", (Time.get_ticks_msec() - start_request_time) / 1000.0)
 			result.finished.emit(result)
@@ -288,6 +290,8 @@ func _call_api(api: ApiApiBeeClient, method_name: String, params: Array = []) ->
 			result.error = error
 			if error.response_code not in [400, 404]:
 				debug_message.emit("err", "network", "API error %s.%s code=%d: %s" % [api._bzz_name, method_name, error.response_code, _redact_text_for_log(str(error))])
+			if _is_connectivity_error(error):
+				network_request_failed.emit(str(error.message))
 			if enable_logs:
 				print(api._bzz_name, " ", method_name, " ", _redact_for_log(result.error), " t: ", (Time.get_ticks_msec() - start_request_time) / 1000.0)
 			result.finished.emit(result)]
@@ -374,6 +378,9 @@ func _websocket_error_response_code(error_name: String) -> int:
 			return HTTPClient.RESPONSE_NOT_FOUND
 		_:
 			return 0
+
+func _is_connectivity_error(error) -> bool:
+	return int(error.response_code) == 0 or int(error.internal_code) == ERR_TIMEOUT
 
 func _create_request_timeout_timer(timeout_sec: float) -> SceneTreeTimer:
 	var tree := get_tree()
@@ -547,6 +554,7 @@ func _on_realtime_start_timeout(revision: int) -> void:
 	)
 	_finish_realtime_start(error)
 	debug_message.emit("err", "network", error.message)
+	network_request_failed.emit(error.message)
 
 func is_realtime_connected() -> bool:
 	return _realtime != null and _realtime.socket != null and _realtime.socket.is_connected
@@ -1597,3 +1605,39 @@ func admin_achievements_admin_unlock_achievement(request: AdminUnlockAchievement
 ## Increment achievement progress for a user (admin)
 func admin_achievements_admin_increment_achievement(request: AdminIncrementAchievementRequest) -> GamendResult:
 	return await _call_api(AdminAchievementsApi.new(_config), "admin_increment_achievement", [request])
+
+# --- Metadata / time utilities -------------------------------------------------
+
+## Deep-merge a metadata patch onto existing metadata. Dictionary sections are
+## merged one level deep (per-section keys are overwritten); scalars replace.
+static func merge_metadata(existing_metadata: Dictionary, patch_metadata: Dictionary) -> Dictionary:
+	var merged := existing_metadata.duplicate(true)
+	for key in patch_metadata:
+		var patch_value = patch_metadata[key]
+		var existing_value = merged.get(key, {})
+		if patch_value is Dictionary and existing_value is Dictionary:
+			var section := (existing_value as Dictionary).duplicate(true)
+			for section_key in patch_value:
+				section[section_key] = patch_value[section_key]
+			merged[key] = section
+		else:
+			merged[key] = patch_value
+	return merged
+
+## Safely read a Dictionary sub-section from metadata; returns {} if absent or
+## the value is not a Dictionary.
+static func metadata_section(metadata: Dictionary, section_key: String) -> Dictionary:
+	var section = metadata.get(section_key, {})
+	if section is Dictionary:
+		return section
+	return {}
+
+## Parse an ISO datetime string (e.g. a user's last_seen_at) to a unix timestamp.
+## Returns 0.0 for empty or unparseable input.
+static func parse_last_seen(last_seen_str: String) -> float:
+	if last_seen_str.is_empty():
+		return 0.0
+	var dt := Time.get_datetime_dict_from_datetime_string(last_seen_str, false)
+	if dt.is_empty():
+		return 0.0
+	return float(Time.get_unix_time_from_datetime_dict(dt))

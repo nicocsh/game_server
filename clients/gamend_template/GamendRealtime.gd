@@ -21,6 +21,7 @@ var _request_seq := 0
 const LOG_REDACTED := "[redacted]"
 const DELTA_UPDATE_KEY := "u"
 const DELTA_REMOVE_KEY := "r"
+const EVENT_LOG_MAX_CHARS := 768
 const SENSITIVE_LOG_KEYS := {
 	"access_token": true,
 	"authorization": true,
@@ -189,7 +190,7 @@ func _channel_on_join_result(event, payload, topic):
 func _channel_on_event(event, payload: Dictionary, status, topic: String):
 	var expanded_payload := _expand_payload_delta(topic, event, payload)
 	if enable_logs:
-		print("Channel on event ", topic, " ", event, " ", _redact_for_log(expanded_payload), " ", _redact_for_log(status))
+		print("Channel on event ", topic, " ", event, " ", _format_log_value(expanded_payload), " ", _format_log_value(status))
 	channel_event.emit(event, expanded_payload, status, topic)
 func _channel_on_error(error, topic):
 	if enable_logs:
@@ -373,3 +374,8 @@ func _is_sensitive_log_key(key: String) -> bool:
 	if SENSITIVE_LOG_KEYS.has(normalized):
 		return true
 	return normalized.ends_with("_token") or normalized.contains("password")
+
+func _format_log_value(value: Variant, limit: int = EVENT_LOG_MAX_CHARS) -> String:
+	var safe := _redact_for_log(value)
+	var text := safe if safe is String else JSON.stringify(safe)
+	return text if text.length() <= limit else text.left(limit) + "... (%d chars truncated)" % (text.length() - limit)
