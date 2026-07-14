@@ -66,6 +66,7 @@ defmodule GameServer.Hooks do
 
   @callback after_user_online(User.t()) :: any()
   @callback after_user_offline(User.t()) :: any()
+  @callback after_user_deleted(User.t()) :: any()
 
   @doc """
   Handle a dynamically-exported RPC function.
@@ -330,6 +331,7 @@ defmodule GameServer.Hooks do
       :after_user_updated,
       :after_user_online,
       :after_user_offline,
+      :after_user_deleted,
       :before_user_update,
       :before_lobby_create,
       :after_lobby_create,
@@ -1060,6 +1062,9 @@ defmodule GameServer.Hooks.Default do
 
   @impl true
   def after_user_offline(_user), do: :ok
+
+  @impl true
+  def after_user_deleted(_user), do: :ok
 
   @impl true
   def before_user_update(_user, attrs), do: {:ok, attrs}

@@ -43,6 +43,8 @@ defmodule GameServer.Hooks.GroupPartyHooksTest do
     @impl true
     def after_user_offline(_user), do: :ok
     @impl true
+    def after_user_deleted(_user), do: :ok
+    @impl true
     def before_user_update(user, attrs) do
       notify({:before_user_update, user, attrs})
       {:ok, attrs}

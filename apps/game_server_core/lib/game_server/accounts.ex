@@ -1700,6 +1700,12 @@ defmodule GameServer.Accounts do
         # a delete followed immediately by a device login sees a stale cached user
         # for the same device_id/email and skips the "create" code path.
         invalidate_user_cache_sync(user)
+
+        # Notify plugins the user is gone so they can refresh derived state that
+        # does not cascade at the DB level (e.g. maintained aggregate counters).
+        # Cascaded rows (kv_entries, plugin FK tables) are already removed here.
+        _ = GameServer.Hooks.internal_call(:after_user_deleted, [user])
+
         ok
 
       err ->

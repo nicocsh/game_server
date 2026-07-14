@@ -119,21 +119,18 @@ defmodule GameServerWeb.HostLayoutNavigation do
       )
 
     ~H"""
-    <div class="dropdown dropdown-end">
-      <button
-        tabindex="0"
-        class={[
-          "btn gap-1",
-          if(
-            @custom_link_active? or
-              String.starts_with?(@current_path, "/users/settings") or
-              String.starts_with?(@current_path, "/notifications") or
-              String.starts_with?(@current_path, "/chat"),
-            do: "btn-primary",
-            else: "btn-outline"
-          )
-        ]}
-      >
+    <details class="dropdown dropdown-end" data-navbar-dropdown>
+      <summary class={[
+        "btn gap-1 list-none",
+        if(
+          @custom_link_active? or
+            String.starts_with?(@current_path, "/users/settings") or
+            String.starts_with?(@current_path, "/notifications") or
+            String.starts_with?(@current_path, "/chat"),
+          do: "btn-primary",
+          else: "btn-outline"
+        )
+      ]}>
         <.icon name="hero-user-circle-solid" class="w-5 h-5" />
         <span class="max-w-[8rem] truncate">{display_name(@current_scope.user)}</span>
         <span
@@ -143,11 +140,8 @@ defmodule GameServerWeb.HostLayoutNavigation do
           {@notif_unread_count}
         </span>
         <.icon name="hero-chevron-down-solid" class="w-3 h-3" />
-      </button>
-      <ul
-        tabindex="0"
-        class="menu menu-sm dropdown-content mt-2 z-[1] p-2 shadow-lg bg-base-100 rounded-box w-56"
-      >
+      </summary>
+      <ul class="menu menu-sm dropdown-content mt-2 z-[1] p-2 shadow-lg bg-base-100 rounded-box w-56">
         <li>
           <.link
             href={~p"/users/settings"}
@@ -194,7 +188,7 @@ defmodule GameServerWeb.HostLayoutNavigation do
           </.link>
         </li>
       </ul>
-    </div>
+    </details>
     """
   end
 

@@ -29,6 +29,9 @@ defmodule GameServerWeb.TestSupport.NoopHooks do
       def after_user_offline(_user), do: :ok
 
       @impl true
+      def after_user_deleted(_user), do: :ok
+
+      @impl true
       def before_user_update(_user, attrs), do: {:ok, attrs}
 
       @impl true
@@ -152,6 +155,7 @@ defmodule GameServerWeb.TestSupport.NoopHooks do
                      after_user_updated: 1,
                      after_user_online: 1,
                      after_user_offline: 1,
+                     after_user_deleted: 1,
                      before_user_update: 2,
                      on_custom_hook: 2,
                      before_lobby_create: 1,
