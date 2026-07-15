@@ -79,39 +79,6 @@ const Hooks = {
       }
     }
   },
-  Fullscreen: {
-    mounted() {
-      // Only show button on devices that support the Fullscreen API
-      if (!document.fullscreenEnabled && !document.webkitFullscreenEnabled) return
-      this.el.classList.remove("hidden")
-
-      this.el.addEventListener("click", () => {
-        const target = document.getElementById(this.el.dataset.target)
-        if (!target) return
-
-        if (document.fullscreenElement) {
-          document.exitFullscreen()
-        } else {
-          target.requestFullscreen().catch(() => {
-            // Fallback for Safari/iOS
-            if (target.webkitRequestFullscreen) target.webkitRequestFullscreen()
-          })
-        }
-      })
-
-      // Update button icon when fullscreen state changes (including Esc key)
-      this.onFSChange = () => {
-        const isFS = !!document.fullscreenElement
-        this.el.setAttribute("data-fullscreen", isFS)
-      }
-      document.addEventListener("fullscreenchange", this.onFSChange)
-      document.addEventListener("webkitfullscreenchange", this.onFSChange)
-    },
-    destroyed() {
-      document.removeEventListener("fullscreenchange", this.onFSChange)
-      document.removeEventListener("webkitfullscreenchange", this.onFSChange)
-    }
-  },
   GameAuth: {
     mounted() {
       const access = this.el.dataset.accessToken
@@ -300,46 +267,35 @@ const Hooks = {
     mounted() {
       this.targetId = this.el.dataset.target || "main-navbar"
       this.navbar = null
-      this.isHidden = false
-      this.delay = parseInt(this.el.dataset.autohideDelay || "5000", 10)
-      this.timer = null
-
-      this.dismissBtn = document.createElement("button")
-      this.dismissBtn.className =
-        "btn btn-ghost btn-circle btn-sm ml-1 opacity-60 hover:opacity-100 transition-opacity"
-      this.dismissBtn.setAttribute("aria-label", "Hide navigation")
-      this.dismissBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>`
-      this.dismissBtn.addEventListener("click", (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        this.hideNavbar()
-      })
+      // Navbar starts collapsed on flush (game) pages. A single fixed toggle
+      // button shows/hides it — no auto-hide timer, so LiveView reconnects
+      // never make the navbar reappear on their own.
+      this.isHidden = true
+      // Skip the slide animation on first paint so the navbar doesn't flash.
+      this.instant = true
 
       this.toggleBtn = document.createElement("button")
       this.toggleBtn.className =
-        "fixed top-3 right-3 z-[60] btn btn-circle btn-sm bg-base-100/60 backdrop-blur-sm border-base-content/10 shadow-md opacity-0 pointer-events-none transition-opacity duration-300"
-      this.toggleBtn.setAttribute("aria-label", "Show navigation")
-      this.toggleBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`
+        "fixed top-3 right-3 z-[60] btn btn-circle btn-sm bg-base-100/60 backdrop-blur-sm border-base-content/10 shadow-md"
       this.toggleBtn.addEventListener("click", (event) => {
         event.preventDefault()
         event.stopPropagation()
-        this.showNavbar()
+        if (this.isHidden) {
+          this.showNavbar()
+        } else {
+          this.hideNavbar()
+        }
       })
 
       document.body.appendChild(this.toggleBtn)
       this.syncNavbar()
-      this.scheduleAutohide()
+      this.instant = false
     },
     updated() {
       this.syncNavbar()
-      if (!this.isHidden && !this.timer) this.scheduleAutohide()
     },
     destroyed() {
-      if (this.timer) clearTimeout(this.timer)
       if (this.navbar) this.applyVisibleState()
-      if (this.dismissBtn) {
-        this.dismissBtn.remove()
-      }
       if (this.toggleBtn) {
         this.toggleBtn.remove()
       }
@@ -349,7 +305,6 @@ const Hooks = {
       if (!navbar) return
 
       this.navbar = navbar
-      this.navbar.appendChild(this.dismissBtn)
 
       if (this.isHidden) {
         this.applyHiddenState()
@@ -357,18 +312,9 @@ const Hooks = {
         this.applyVisibleState()
       }
     },
-    scheduleAutohide() {
-      if (!this.navbar) return
-      if (this.timer) clearTimeout(this.timer)
-      this.timer = setTimeout(() => this.hideNavbar(), this.delay)
-    },
     hideNavbar() {
       if (!this.navbar) return
       this.isHidden = true
-      if (this.timer) {
-        clearTimeout(this.timer)
-        this.timer = null
-      }
       this.applyHiddenState()
     },
     showNavbar() {
@@ -377,27 +323,29 @@ const Hooks = {
 
       this.isHidden = false
       this.applyVisibleState()
-      this.scheduleAutohide()
+    },
+    navbarTransition() {
+      return this.instant ? "none" : "opacity 0.3s ease, transform 0.3s ease"
     },
     applyHiddenState() {
       if (!this.navbar || !this.toggleBtn) return
 
-      this.navbar.style.transition = "opacity 0.5s ease, transform 0.5s ease"
+      this.navbar.style.transition = this.navbarTransition()
       this.navbar.style.opacity = "0"
       this.navbar.style.transform = "translateY(-100%)"
       this.navbar.style.pointerEvents = "none"
-      this.toggleBtn.style.opacity = "1"
-      this.toggleBtn.style.pointerEvents = "auto"
+      this.toggleBtn.setAttribute("aria-label", "Show navigation")
+      this.toggleBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`
     },
     applyVisibleState() {
       if (!this.navbar || !this.toggleBtn) return
 
-      this.navbar.style.transition = "opacity 0.3s ease, transform 0.3s ease"
+      this.navbar.style.transition = this.navbarTransition()
       this.navbar.style.opacity = "1"
       this.navbar.style.transform = "translateY(0)"
       this.navbar.style.pointerEvents = "auto"
-      this.toggleBtn.style.opacity = "0"
-      this.toggleBtn.style.pointerEvents = "none"
+      this.toggleBtn.setAttribute("aria-label", "Hide navigation")
+      this.toggleBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>`
     }
   },
 

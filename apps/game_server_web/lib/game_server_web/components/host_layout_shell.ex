@@ -28,7 +28,6 @@ defmodule GameServerWeb.HostLayoutShell do
         :if={@flush}
         id="navbar-autohide"
         phx-hook="NavbarAutohide"
-        data-autohide-delay="5000"
         data-target="main-navbar"
         class="hidden"
       />
@@ -36,10 +35,10 @@ defmodule GameServerWeb.HostLayoutShell do
         id="main-navbar"
         phx-hook="NavbarDropdowns"
         class={[
-          "navbar px-4 sm:px-6 lg:px-8 z-50",
+          "navbar z-50",
           if(@flush,
-            do: "absolute top-0 left-0 right-0",
-            else: "sticky top-0 shrink-0"
+            do: "absolute top-0 left-0 right-0 pl-4 sm:pl-6 lg:pl-8 pr-14",
+            else: "sticky top-0 shrink-0 px-4 sm:px-6 lg:px-8"
           ),
           if(@flush,
             do: "bg-base-100/90 backdrop-blur-md",
