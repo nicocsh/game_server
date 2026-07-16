@@ -37,7 +37,8 @@ defmodule GameServerWeb.Api.V1.Admin.GroupController do
       max_members: %Schema{type: :integer},
       metadata: %Schema{type: :object},
       creator_id: %Schema{
-        type: :integer,
+        type: :string,
+        format: :uuid,
         description: "User ID of the creator, or -1 for system groups"
       },
       creator_name: %Schema{type: :string},

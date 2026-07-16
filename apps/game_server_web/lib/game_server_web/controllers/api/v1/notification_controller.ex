@@ -97,7 +97,8 @@ defmodule GameServerWeb.Api.V1.NotificationController do
         type: :object,
         properties: %{
           user_id: %Schema{
-            type: :integer,
+            type: :string,
+            format: :uuid,
             description: "Recipient user ID (must be an accepted friend)"
           },
           title: %Schema{type: :string, description: "Notification title (required)"},

@@ -18,14 +18,16 @@ defmodule GameServerWeb.Api.V1.Admin.KvEntryController do
       id: %Schema{type: :string, format: :uuid},
       key: %Schema{type: :string},
       user_id: %Schema{
-        type: :integer,
+        type: :string,
+        format: :uuid,
         nullable: false,
         description: "Owner user id; -1 means global/unowned",
         example: -1,
         minimum: -1
       },
       lobby_id: %Schema{
-        type: :integer,
+        type: :string,
+        format: :uuid,
         nullable: true,
         description: "Owner lobby id; -1 means global/unowned",
         example: -1,

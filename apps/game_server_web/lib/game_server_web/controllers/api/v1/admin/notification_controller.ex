@@ -52,13 +52,13 @@ defmodule GameServerWeb.Api.V1.Admin.NotificationController do
     parameters: [
       user_id: [
         in: :query,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Filter by recipient user ID",
         required: false
       ],
       sender_id: [
         in: :query,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Filter by sender user ID",
         required: false
       ],

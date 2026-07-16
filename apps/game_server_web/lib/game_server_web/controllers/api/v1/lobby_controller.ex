@@ -392,7 +392,7 @@ defmodule GameServerWeb.Api.V1.LobbyController do
     parameters: [
       id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Lobby ID",
         required: true
       ]

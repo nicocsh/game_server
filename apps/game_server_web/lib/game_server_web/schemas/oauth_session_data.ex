@@ -18,7 +18,8 @@ defmodule GameServerWeb.Schemas.OAuthSessionData do
       refresh_token: %Schema{type: :string, description: "Long-lived refresh token"},
       expires_in: %Schema{type: :integer, description: "Seconds until access_token expires"},
       user_id: %Schema{
-        type: :integer,
+        type: :string,
+        format: :uuid,
         description: "User id that was authenticated for this session (when completed)"
       },
       display_name: %Schema{

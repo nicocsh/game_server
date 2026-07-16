@@ -29,7 +29,8 @@ defmodule GameServerWeb.Api.V1.GroupController do
       max_members: %Schema{type: :integer, description: "Maximum number of members"},
       metadata: %Schema{type: :object, description: "Server-managed metadata"},
       creator_id: %Schema{
-        type: :integer,
+        type: :string,
+        format: :uuid,
         description: "User ID of the creator, or -1 for system groups"
       },
       creator_name: %Schema{
@@ -479,7 +480,7 @@ defmodule GameServerWeb.Api.V1.GroupController do
       ],
       request_id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Join request ID",
         required: true
       ]
@@ -506,7 +507,7 @@ defmodule GameServerWeb.Api.V1.GroupController do
       ],
       request_id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Join request ID",
         required: true
       ]
@@ -533,7 +534,7 @@ defmodule GameServerWeb.Api.V1.GroupController do
       ],
       request_id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Join request ID",
         required: true
       ]
@@ -603,7 +604,7 @@ defmodule GameServerWeb.Api.V1.GroupController do
     parameters: [
       invite_id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Invite ID (from the invitations list)",
         required: true
       ]
@@ -626,7 +627,7 @@ defmodule GameServerWeb.Api.V1.GroupController do
     parameters: [
       invite_id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Invite ID (from the invitations list)",
         required: true
       ]
@@ -750,7 +751,7 @@ defmodule GameServerWeb.Api.V1.GroupController do
     parameters: [
       invite_id: [
         in: :path,
-        type: :integer,
+        type: :string,
         description: "ID of the GroupInvite to cancel",
         required: true
       ]
@@ -779,7 +780,7 @@ defmodule GameServerWeb.Api.V1.GroupController do
     parameters: [
       id: [
         in: :path,
-        type: :integer,
+        type: :string,
         description: "Group ID",
         required: true
       ]

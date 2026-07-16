@@ -29,7 +29,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
         type: :object,
         properties: %{
           target_user_id: %Schema{
-            type: :integer,
+            type: :string,
+            format: :uuid,
             description: "Target user's id (user_id) to whom the request will be sent"
           }
         },
@@ -222,7 +223,7 @@ defmodule GameServerWeb.Api.V1.FriendController do
     parameters: [
       id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description:
           "Friendship record id (friendship_id) - the id of the friendship row, not a user id",
         required: true
@@ -242,7 +243,7 @@ defmodule GameServerWeb.Api.V1.FriendController do
     parameters: [
       id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description:
           "Friendship record id (friendship_id) - the id of the friendship row, not a user id",
         required: true
@@ -262,7 +263,7 @@ defmodule GameServerWeb.Api.V1.FriendController do
     parameters: [
       id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description:
           "Friendship record id (friendship_id) - the id of the friendship row, not a user id",
         required: true
@@ -340,7 +341,7 @@ defmodule GameServerWeb.Api.V1.FriendController do
     parameters: [
       id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description:
           "Friendship record id (friendship_id) - the id of the friendship row, not a user id",
         required: true

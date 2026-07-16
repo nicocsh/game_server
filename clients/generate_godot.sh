@@ -227,6 +227,7 @@ ROOT_ADDONS="$ROOT_DIR/godot_addons"
 
 mkdir -p "$ROOT_ADDONS/addons"
 
-mv "$DST_GAMEND" "$ROOT_ADDONS/addons" 2>/dev/null || true
+rm -rf "$ROOT_ADDONS/addons/gamend"
+mv "$DST_GAMEND" "$ROOT_ADDONS/addons/gamend"
 
 echo "gamend_template -> gamend copy complete."

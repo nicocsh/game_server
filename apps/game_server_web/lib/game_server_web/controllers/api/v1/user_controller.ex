@@ -39,13 +39,15 @@ defmodule GameServerWeb.Api.V1.UserController do
                      description: "User metadata (accessories, hat, color, etc.)"
                    },
                    lobby_id: %Schema{
-                     type: :integer,
+                     type: :string,
+                     format: :uuid,
                      nullable: false,
                      description:
                        "Lobby ID when user is currently in a lobby. -1 means not currently in a lobby."
                    },
                    party_id: %Schema{
-                     type: :integer,
+                     type: :string,
+                     format: :uuid,
                      nullable: false,
                      description:
                        "Party ID when user is currently in a party. -1 means not currently in a party."
@@ -89,13 +91,15 @@ defmodule GameServerWeb.Api.V1.UserController do
                description: "User metadata (accessories, hat, color, etc.)"
              },
              lobby_id: %Schema{
-               type: :integer,
+               type: :string,
+               format: :uuid,
                nullable: false,
                description:
                  "Lobby ID when user is currently in a lobby. -1 means not currently in a lobby."
              },
              party_id: %Schema{
-               type: :integer,
+               type: :string,
+               format: :uuid,
                nullable: false,
                description:
                  "Party ID when user is currently in a party. -1 means not currently in a party."

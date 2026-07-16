@@ -24,7 +24,8 @@ defmodule GameServerWeb.Api.V1.ChatController do
         description: "Type of chat conversation"
       },
       chat_ref_id: %Schema{
-        type: :integer,
+        type: :string,
+        format: :uuid,
         description: "Reference ID (lobby_id, group_id, party_id, or friend user_id)"
       },
       inserted_at: %Schema{type: :string, format: "date-time"},
@@ -64,7 +65,8 @@ defmodule GameServerWeb.Api.V1.ChatController do
              description: "Type of chat"
            },
            chat_ref_id: %Schema{
-             type: :integer,
+             type: :string,
+             format: :uuid,
              description: "Reference ID (lobby_id, group_id, party_id, or friend user_id)"
            },
            content: %Schema{type: :string, description: "Message text (1-4096 chars)"},
@@ -213,7 +215,7 @@ defmodule GameServerWeb.Api.V1.ChatController do
       chat_ref_id: [
         in: :query,
         required: true,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Reference ID (lobby_id, group_id, party_id, or friend user_id)"
       ],
       page: [
@@ -350,7 +352,7 @@ defmodule GameServerWeb.Api.V1.ChatController do
       chat_ref_id: [
         in: :query,
         required: true,
-        schema: %Schema{type: :integer}
+        schema: %Schema{type: :string, format: :uuid}
       ]
     ],
     responses: [

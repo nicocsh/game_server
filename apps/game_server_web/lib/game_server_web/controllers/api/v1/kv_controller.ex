@@ -23,13 +23,13 @@ defmodule GameServerWeb.Api.V1.KvController do
       key: [in: :path, schema: %Schema{type: :string}, description: "Key", required: true],
       user_id: [
         in: :query,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Optional owner user id",
         required: false
       ],
       lobby_id: [
         in: :query,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Optional owner lobby id",
         required: false
       ]

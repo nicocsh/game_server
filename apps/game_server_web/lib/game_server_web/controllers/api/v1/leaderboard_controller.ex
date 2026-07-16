@@ -57,8 +57,9 @@ defmodule GameServerWeb.Api.V1.LeaderboardController do
     properties: %{
       rank: %Schema{type: :integer, description: "Player's rank on this leaderboard"},
       user_id: %Schema{
-        type: :integer,
-        description: "User ID (-1 for non-user/label-based records)"
+        type: :string,
+        format: :uuid,
+        description: "User ID (empty for label-based records)"
       },
       display_name: %Schema{
         type: :string,
@@ -213,7 +214,7 @@ defmodule GameServerWeb.Api.V1.LeaderboardController do
     parameters: [
       id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Leaderboard ID",
         required: true
       ]
@@ -320,7 +321,7 @@ defmodule GameServerWeb.Api.V1.LeaderboardController do
     parameters: [
       id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Leaderboard ID",
         required: true
       ],
@@ -389,13 +390,13 @@ defmodule GameServerWeb.Api.V1.LeaderboardController do
     parameters: [
       id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Leaderboard ID",
         required: true
       ],
       user_id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "User ID to center around",
         required: true
       ],
@@ -449,7 +450,7 @@ defmodule GameServerWeb.Api.V1.LeaderboardController do
     parameters: [
       id: [
         in: :path,
-        schema: %Schema{type: :integer},
+        schema: %Schema{type: :string, format: :uuid},
         description: "Leaderboard ID",
         required: true
       ]

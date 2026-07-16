@@ -32,13 +32,15 @@ defmodule GameServerWeb.Api.V1.MeController do
             display_name: %Schema{type: :string},
             metadata: %Schema{type: :object},
             lobby_id: %Schema{
-              type: :integer,
+              type: :string,
+              format: :uuid,
               nullable: false,
               description:
                 "Lobby ID when user is currently in a lobby. -1 means not currently in a lobby."
             },
             party_id: %Schema{
-              type: :integer,
+              type: :string,
+              format: :uuid,
               nullable: false,
               description:
                 "Party ID when user is currently in a party. -1 means not currently in a party."
