@@ -18,11 +18,12 @@ defmodule GameServer.Accounts do
   """
 
   import Ecto.Query, warn: false
+  require Logger
   use Nebulex.Caching, cache: GameServer.Cache
   alias GameServer.Repo
   alias GameServer.Types
 
-  alias GameServer.Accounts.{User, UserNotifier, UserToken}
+  alias GameServer.Accounts.{User, UsernameGenerator, UserNotifier, UserToken}
 
   @stats_cache_ttl_ms 60_000
   @users_count_cache_ttl_ms 60_000
@@ -125,14 +126,16 @@ defmodule GameServer.Accounts do
 
     Repo.all(
       from u in User,
-        where: fragment("lower(?) LIKE ? ESCAPE '\\'", u.display_name, ^pattern),
+        where:
+          fragment("lower(?) LIKE ? ESCAPE '\\'", u.display_name, ^pattern) or
+            fragment("? LIKE ? ESCAPE '\\'", u.username, ^pattern),
         limit: ^page_size,
         offset: ^offset
     )
   end
 
   @doc """
-  Count users matching a display name query or exact numeric id. Returns integer.
+  Count users matching a username/display name query or exact id. Returns integer.
   """
   @spec count_search_users(String.t()) :: non_neg_integer()
   def count_search_users(query) when is_binary(query) do
@@ -168,7 +171,9 @@ defmodule GameServer.Accounts do
 
     Repo.one(
       from u in User,
-        where: fragment("lower(?) LIKE ? ESCAPE '\\'", u.display_name, ^pattern),
+        where:
+          fragment("lower(?) LIKE ? ESCAPE '\\'", u.display_name, ^pattern) or
+            fragment("? LIKE ? ESCAPE '\\'", u.username, ^pattern),
         select: count(u.id)
     ) || 0
   end
@@ -338,7 +343,7 @@ defmodule GameServer.Accounts do
   `last_seen_at` to now and `is_online` to true, then invalidates the cache.
   Fire-and-forget — errors are ignored.
   """
-  @spec touch_last_seen_by_id(String.t()) :: :ok
+  @spec touch_last_seen_by_id(Ecto.UUID.t()) :: :ok
   def touch_last_seen_by_id(user_id) when is_binary(user_id) do
     now = DateTime.utc_now(:second)
 
@@ -408,7 +413,7 @@ defmodule GameServer.Accounts do
       ** (Ecto.NoResultsError)
 
   """
-  @spec get_user!(String.t()) :: User.t()
+  @spec get_user!(Ecto.UUID.t()) :: User.t()
   def get_user!(id) do
     case get_user(id) do
       %User{} = user ->
@@ -433,7 +438,7 @@ defmodule GameServer.Accounts do
       nil
 
   """
-  @spec get_user(String.t()) :: User.t() | nil
+  @spec get_user(Ecto.UUID.t()) :: User.t() | nil
   @decorate cacheable(
               key: {:accounts, :user, id},
               match: &cache_match/1,
@@ -514,7 +519,7 @@ defmodule GameServer.Accounts do
   Public cache invalidation for cross-module use (lobbies, parties, groups).
   Accepts a user ID and clears both the primary and all index caches.
   """
-  @spec invalidate_user_cache_by_id(String.t()) :: :ok
+  @spec invalidate_user_cache_by_id(Ecto.UUID.t()) :: :ok
   def invalidate_user_cache_by_id(user_id) when is_binary(user_id) do
     case Repo.get(User, user_id) do
       %User{} = user -> invalidate_user_cache(user)
@@ -554,23 +559,24 @@ defmodule GameServer.Accounts do
     # Check if this is the first user and make them admin
     is_first_user = first_user?()
 
-    case %User{}
-         |> User.email_changeset(attrs)
-         |> maybe_attach_device(attrs)
-         |> maybe_make_first_user_admin(is_first_user)
-         |> maybe_deactivate_new_user(is_first_user)
-         |> Repo.insert() do
-      {:ok, user} = ok ->
-        invalidate_users_count_cache()
+    changeset_fun = fn attrs ->
+      %User{}
+      |> User.email_changeset(attrs)
+      |> User.username_changeset(attrs)
+      |> maybe_attach_device(attrs)
+      |> maybe_make_first_user_admin(is_first_user)
+      |> maybe_deactivate_new_user(is_first_user)
+    end
 
-        GameServer.Async.run(fn ->
-          GameServer.Hooks.internal_call(:after_user_register, [user])
-        end)
+    with {:ok, attrs} <- run_before_user_register(changeset_fun, attrs),
+         {:ok, user} = ok <- insert_user_with_username_retry(changeset_fun, attrs) do
+      invalidate_users_count_cache()
 
-        ok
+      GameServer.Async.run(fn ->
+        GameServer.Hooks.internal_call(:after_user_register, [user])
+      end)
 
-      err ->
-        err
+      ok
     end
   end
 
@@ -602,15 +608,17 @@ defmodule GameServer.Accounts do
     # Check if this is the first user and make them admin
     is_first_user = first_user?()
 
-    transaction_fun = fn ->
-      changeset =
-        %User{}
-        |> User.email_changeset(attrs)
-        |> maybe_attach_device(attrs)
-        |> maybe_make_first_user_admin(is_first_user)
-        |> maybe_deactivate_new_user(is_first_user)
+    changeset_fun = fn attrs ->
+      %User{}
+      |> User.email_changeset(attrs)
+      |> User.username_changeset(attrs)
+      |> maybe_attach_device(attrs)
+      |> maybe_make_first_user_admin(is_first_user)
+      |> maybe_deactivate_new_user(is_first_user)
+    end
 
-      case Repo.insert(changeset) do
+    transaction_fun = fn attrs ->
+      case Repo.insert(changeset_fun.(attrs)) do
         {:ok, %User{} = user} ->
           case maybe_send_confirmation(user, is_first_user, notifier, confirmation_url_fun) do
             :ok -> user
@@ -619,24 +627,18 @@ defmodule GameServer.Accounts do
 
         {:error, %Ecto.Changeset{} = changeset} ->
           Repo.rollback(changeset)
-
-        err ->
-          Repo.rollback(err)
       end
     end
 
-    case Repo.transaction(transaction_fun) do
-      {:ok, %User{} = user} ->
-        invalidate_users_count_cache()
+    with {:ok, attrs} <- run_before_user_register(changeset_fun, attrs),
+         {:ok, %User{} = user} <- transact_with_username_retry(transaction_fun, attrs) do
+      invalidate_users_count_cache()
 
-        GameServer.Async.run(fn ->
-          GameServer.Hooks.internal_call(:after_user_register, [user])
-        end)
+      GameServer.Async.run(fn ->
+        GameServer.Hooks.internal_call(:after_user_register, [user])
+      end)
 
-        {:ok, user}
-
-      {:error, reason} ->
-        {:error, reason}
+      {:ok, user}
     end
   end
 
@@ -652,6 +654,82 @@ defmodule GameServer.Accounts do
          ) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @username_insert_attempts 4
+
+  defp put_generated_username(attrs) do
+    case attrs["username"] do
+      u when is_binary(u) and u != "" -> attrs
+      _ -> Map.put(attrs, "username", UsernameGenerator.generate(attrs))
+    end
+  end
+
+  # Runs the before_user_register pipeline with the tentative (not yet
+  # inserted) user built from attrs. Returns the possibly hook-modified,
+  # string-keyed attrs.
+  defp run_before_user_register(changeset_fun, attrs) do
+    attrs = put_generated_username(attrs)
+    tentative = attrs |> changeset_fun.() |> Ecto.Changeset.apply_changes()
+
+    case GameServer.Hooks.internal_call(:before_user_register, [tentative, attrs]) do
+      {:ok, returned} when is_map(returned) and not is_struct(returned) ->
+        {:ok, Map.new(returned, fn {k, v} -> {to_string(k), v} end)}
+
+      {:ok, _other} ->
+        {:ok, attrs}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # Registration must never fail on a bad username: a hook-supplied or
+  # generated name that is invalid or already taken is replaced with a
+  # freshly generated one (wider suffix on later attempts). Other changeset
+  # errors pass through untouched.
+  defp insert_user_with_username_retry(changeset_fun, attrs, attempt \\ 1) do
+    case Repo.insert(changeset_fun.(attrs)) do
+      {:ok, _user} = ok ->
+        ok
+
+      {:error, %Ecto.Changeset{} = changeset} = err ->
+        case regenerate_username_attrs(attrs, changeset, attempt) do
+          {:retry, attrs} -> insert_user_with_username_retry(changeset_fun, attrs, attempt + 1)
+          :no_retry -> err
+        end
+    end
+  end
+
+  # A unique violation aborts the surrounding Postgres transaction, so the
+  # retry must restart the whole transaction rather than re-insert inside
+  # the aborted one.
+  defp transact_with_username_retry(transaction_fun, attrs, attempt \\ 1) do
+    case Repo.transaction(fn -> transaction_fun.(attrs) end) do
+      {:error, %Ecto.Changeset{} = changeset} = err ->
+        case regenerate_username_attrs(attrs, changeset, attempt) do
+          {:retry, attrs} -> transact_with_username_retry(transaction_fun, attrs, attempt + 1)
+          :no_retry -> err
+        end
+
+      other ->
+        other
+    end
+  end
+
+  defp regenerate_username_attrs(attrs, %Ecto.Changeset{errors: errors}, attempt) do
+    if Keyword.has_key?(errors, :username) and attempt < @username_insert_attempts do
+      regenerated = UsernameGenerator.generate(attrs, attempt + 1)
+
+      Logger.warning(
+        "username #{inspect(attrs["username"])} rejected " <>
+          "(#{inspect(Keyword.get_values(errors, :username))}), retrying as #{regenerated}"
+      )
+
+      {:retry, Map.put(attrs, "username", regenerated)}
+    else
+      :no_retry
     end
   end
 
@@ -882,6 +960,15 @@ defmodule GameServer.Accounts do
     get_user_by_field(:facebook_id, facebook_id)
   end
 
+  @doc """
+  Gets a user by their unique username handle (case-insensitive; usernames
+  are stored lowercase).
+  """
+  @spec get_user_by_username(String.t()) :: User.t() | nil
+  def get_user_by_username(username) when is_binary(username) do
+    get_user_by_field(:username, String.downcase(username))
+  end
+
   defp get_user_by_device_id(device_id) when is_binary(device_id) do
     get_user_by_field(:device_id, device_id)
   end
@@ -912,27 +999,31 @@ defmodule GameServer.Accounts do
       nil ->
         # Create a new anonymous user for the device. Allow callers to
         # specify optional display_name/metadata via attrs.
-        attrs = Map.put_new(attrs, :display_name, nil)
+        attrs =
+          attrs
+          |> Map.new(fn {k, v} -> {to_string(k), v} end)
+          |> Map.put_new("display_name", nil)
 
         is_first_user = first_user?()
 
-        case %User{}
-             |> User.device_changeset(attrs)
-             |> maybe_make_first_user_admin(is_first_user)
-             |> maybe_deactivate_new_user(is_first_user)
-             |> User.attach_device_changeset(%{device_id: device_id})
-             |> Repo.insert() do
-          {:ok, user} = ok ->
-            invalidate_users_count_cache()
+        changeset_fun = fn attrs ->
+          %User{}
+          |> User.device_changeset(attrs)
+          |> User.username_changeset(attrs)
+          |> maybe_make_first_user_admin(is_first_user)
+          |> maybe_deactivate_new_user(is_first_user)
+          |> User.attach_device_changeset(%{device_id: device_id})
+        end
 
-            GameServer.Async.run(fn ->
-              GameServer.Hooks.internal_call(:after_user_register, [user])
-            end)
+        with {:ok, attrs} <- run_before_user_register(changeset_fun, attrs),
+             {:ok, user} = ok <- insert_user_with_username_retry(changeset_fun, attrs) do
+          invalidate_users_count_cache()
 
-            ok
+          GameServer.Async.run(fn ->
+            GameServer.Hooks.internal_call(:after_user_register, [user])
+          end)
 
-          err ->
-            err
+          ok
         end
     end
   end
@@ -1101,28 +1192,28 @@ defmodule GameServer.Accounts do
 
     # For new user creation when provider didn't return an email, avoid
     # passing a nil email into the changeset (update_change will crash).
-    attrs = if Map.get(attrs, :email) in [nil, ""], do: Map.delete(attrs, :email), else: attrs
+    attrs = Map.new(attrs, fn {k, v} -> {to_string(k), v} end)
+    attrs = if attrs["email"] in [nil, ""], do: Map.delete(attrs, "email"), else: attrs
 
     # Admin is granted via put_change (server-side), never cast from provider
     # attrs — the OAuth changesets must not accept :is_admin.
-    changeset =
+    changeset_fun = fn attrs ->
       %User{}
       |> changeset_fn.(attrs)
+      |> User.username_changeset(attrs)
       |> maybe_make_first_user_admin(is_first_user)
       |> maybe_deactivate_new_user(is_first_user)
+    end
 
-    case Repo.insert(changeset) do
-      {:ok, user} = ok ->
-        invalidate_users_count_cache()
+    with {:ok, attrs} <- run_before_user_register(changeset_fun, attrs),
+         {:ok, user} = ok <- insert_user_with_username_retry(changeset_fun, attrs) do
+      invalidate_users_count_cache()
 
-        GameServer.Async.run(fn ->
-          GameServer.Hooks.internal_call(:after_user_register, [user])
-        end)
+      GameServer.Async.run(fn ->
+        GameServer.Hooks.internal_call(:after_user_register, [user])
+      end)
 
-        ok
-
-      err ->
-        err
+      ok
     end
   end
 
@@ -1602,7 +1693,7 @@ defmodule GameServer.Accounts do
   end
 
   @doc false
-  @spec get_user_token(String.t()) :: UserToken.t() | nil
+  @spec get_user_token(Ecto.UUID.t()) :: UserToken.t() | nil
   @decorate cacheable(
               key: {:accounts, :user_token, id},
               match: &cache_match/1,
@@ -1613,7 +1704,7 @@ defmodule GameServer.Accounts do
   end
 
   @doc false
-  @spec get_user_token!(String.t()) :: UserToken.t()
+  @spec get_user_token!(Ecto.UUID.t()) :: UserToken.t()
   def get_user_token!(id) do
     case get_user_token(id) do
       %UserToken{} = token -> token
@@ -1637,7 +1728,7 @@ defmodule GameServer.Accounts do
   @doc """
   Lists tokens for a given user, optionally filtered by context.
   """
-  @spec list_user_tokens(String.t(), keyword()) :: [UserToken.t()]
+  @spec list_user_tokens(Ecto.UUID.t(), keyword()) :: [UserToken.t()]
   def list_user_tokens(user_id, opts \\ []) when is_binary(user_id) do
     context = Keyword.get(opts, :context)
 
@@ -1651,7 +1742,7 @@ defmodule GameServer.Accounts do
   @doc """
   Counts tokens for a given user.
   """
-  @spec count_user_tokens(String.t()) :: non_neg_integer()
+  @spec count_user_tokens(Ecto.UUID.t()) :: non_neg_integer()
   def count_user_tokens(user_id) when is_binary(user_id) do
     from(t in UserToken, where: t.user_id == ^user_id, select: count())
     |> Repo.one()
@@ -1660,7 +1751,7 @@ defmodule GameServer.Accounts do
   @doc """
   Revokes all session tokens for a user (mass logout).
   """
-  @spec revoke_all_user_sessions(String.t()) :: {non_neg_integer(), nil}
+  @spec revoke_all_user_sessions(Ecto.UUID.t()) :: {non_neg_integer(), nil}
   def revoke_all_user_sessions(user_id) when is_binary(user_id) do
     token_ids =
       from(t in UserToken,
@@ -1724,6 +1815,11 @@ defmodule GameServer.Accounts do
     case Repo.delete(user) do
       {:ok, _user} = ok ->
         invalidate_users_count_cache()
+
+        # Friend DMs sent *to* this user (chat_type "friend", chat_ref_id = user)
+        # have no FK to cascade — the sender's own messages go via sender_id, so
+        # remove the inbound half here to avoid orphaned half-conversations.
+        _ = GameServer.Chat.cleanup_chat("friend", user.id)
 
         # Deleting cache entries asynchronously can cause a short-lived race where
         # a delete followed immediately by a device login sees a stale cached user
@@ -1877,6 +1973,7 @@ defmodule GameServer.Accounts do
       email: user.email || "",
       profile_url: user.profile_url || "",
       metadata: user.metadata || %{},
+      username: user.username || "",
       display_name: user.display_name || "",
       lobby_id: user.lobby_id || "",
       party_id: user.party_id || "",
@@ -1928,6 +2025,12 @@ defmodule GameServer.Accounts do
     User.display_name_changeset(user, attrs)
   end
 
+  @spec change_username(User.t()) :: Ecto.Changeset.t()
+  @spec change_username(User.t(), map()) :: Ecto.Changeset.t()
+  def change_username(user, attrs \\ %{}) do
+    User.username_changeset(user, attrs)
+  end
+
   @doc """
   Updates the user's display name and broadcasts the change.
   """
@@ -1944,6 +2047,48 @@ defmodule GameServer.Accounts do
           end
 
         case User.display_name_changeset(user, attrs_to_use) |> Repo.update() do
+          {:ok, updated} = ok ->
+            invalidate_user_cache_sync(user)
+            invalidate_user_cache_sync(updated)
+            broadcast_user_update(updated)
+            broadcast_member_update(updated)
+
+            GameServer.Async.run(fn ->
+              GameServer.Hooks.internal_call(:after_user_updated, [updated])
+            end)
+
+            ok
+
+          err ->
+            err
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Updates the user's unique username handle and broadcasts the change.
+
+  Strict, unlike registration: an invalid or taken username returns
+  `{:error, changeset}` with no generated fallback, so the player can pick
+  again. Routed through the `before_user_update` hook pipeline, where games
+  can forbid changes entirely or reject names (profanity, reserved words).
+  """
+  @spec update_username(User.t(), map()) ::
+          {:ok, User.t()} | {:error, Ecto.Changeset.t() | term()}
+  def update_username(%User{} = user, attrs) do
+    case GameServer.Hooks.internal_call(:before_user_update, [user, attrs]) do
+      {:ok, returned} ->
+        attrs_to_use =
+          if is_map(returned) and not is_struct(returned) do
+            returned
+          else
+            attrs
+          end
+
+        case User.username_changeset(user, attrs_to_use) |> Repo.update() do
           {:ok, updated} = ok ->
             invalidate_user_cache_sync(user)
             invalidate_user_cache_sync(updated)
@@ -2057,7 +2202,7 @@ defmodule GameServer.Accounts do
 
   Returns {:ok, user} on success.
   """
-  @spec set_user_online(String.t()) :: {:ok, User.t()} | {:error, term()}
+  @spec set_user_online(Ecto.UUID.t()) :: {:ok, User.t()} | {:error, term()}
   def set_user_online(user_id) when is_binary(user_id) do
     now = DateTime.utc_now(:second)
 
@@ -2096,7 +2241,7 @@ defmodule GameServer.Accounts do
 
   Returns {:ok, user} on success.
   """
-  @spec set_user_offline(String.t()) :: {:ok, User.t()} | {:error, term()}
+  @spec set_user_offline(Ecto.UUID.t()) :: {:ok, User.t()} | {:error, term()}
   def set_user_offline(user_id) when is_binary(user_id) do
     now = DateTime.utc_now(:second)
 
