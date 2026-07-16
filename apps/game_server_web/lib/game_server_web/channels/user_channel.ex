@@ -51,6 +51,7 @@ defmodule GameServerWeb.UserChannel do
   alias GameServer.Hooks.PluginManager
   alias GameServer.KV
   alias GameServer.Lobbies
+  alias GameServer.Matchmaking
   alias GameServer.Notifications
   alias GameServer.Parties
   alias GameServerWeb.PayloadDelta
@@ -223,6 +224,39 @@ defmodule GameServerWeb.UserChannel do
           if Process.alive?(peer), do: GameServerWeb.WebRTCPeer.close(peer)
           {:reply, {:ok, %{}}, assign(socket, :webrtc_peer, nil)}
       end
+    end
+  end
+
+  # ── Matchmaking via channel ───────────────────────────────────────────────────
+
+  @impl true
+  def handle_in("matchmaking:join", payload, socket) do
+    with :ok <- check_ws_rate_limit(socket) do
+      match_params = parse_match_params(payload)
+      min_players = parse_optional_int(Map.get(payload || %{}, "min_players"))
+      max_players = parse_optional_int(Map.get(payload || %{}, "max_players"))
+
+      case Matchmaking.join(
+             Accounts.get_user(socket.assigns.user_id) || socket.assigns.current_scope.user,
+             match_params,
+             min_players,
+             max_players
+           ) do
+        {:ok, ticket} ->
+          {:reply, {:ok, %{ticket_id: ticket.id, status: ticket.status}}, socket}
+
+        {:error, changeset} ->
+          {:reply, {:error, %{error: "invalid_ticket", details: format_errors(changeset)}},
+           socket}
+      end
+    end
+  end
+
+  @impl true
+  def handle_in("matchmaking:cancel", _payload, socket) do
+    with :ok <- check_ws_rate_limit(socket) do
+      :ok = Matchmaking.cancel(socket.assigns.user_id)
+      {:reply, {:ok, %{status: "cancelled"}}, socket}
     end
   end
 
@@ -477,6 +511,9 @@ defmodule GameServerWeb.UserChannel do
       # Unsubscribe from notifications
       Notifications.unsubscribe(user_id)
 
+      # Cancel matchmaking tickets
+      GameServer.Matchmaking.cancel(user_id)
+
       # Only mark offline if no other user_channel processes remain for this user.
       # ConnectionTracker automatically unregisters the *current* process on exit,
       # but terminate runs before the process fully exits, so we subtract 1 (self).
@@ -725,5 +762,33 @@ defmodule GameServerWeb.UserChannel do
       nil -> :ok
       peer -> if Process.alive?(peer), do: GameServerWeb.WebRTCPeer.close(peer)
     end
+  end
+
+  # ── Matchmaking Helpers ────────────────────────────────────────────────
+
+  defp parse_match_params(nil), do: %{}
+
+  defp parse_match_params(payload) when is_map(payload) do
+    Map.get(payload, "match_params", %{})
+  end
+
+  defp parse_optional_int(nil), do: nil
+  defp parse_optional_int(value) when is_integer(value), do: value
+
+  defp parse_optional_int(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, _rest} -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_optional_int(_value), do: nil
+
+  defp format_errors(changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
+        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+      end)
+    end)
   end
 end
