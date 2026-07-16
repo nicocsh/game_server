@@ -1160,15 +1160,20 @@ defmodule GameServer.Groups do
     end
   end
 
+  @max_page_size 1000
+
   defp paginate(q, opts) do
-    page = Keyword.get(opts, :page, nil)
-    page_size = Keyword.get(opts, :page_size, nil)
+    page = Keyword.get(opts, :page)
+    page_size = Keyword.get(opts, :page_size)
 
     if page && page_size do
-      offset = (page - 1) * page_size
-      Repo.all(from g in q, limit: ^page_size, offset: ^offset)
+      size = page_size |> min(@max_page_size) |> max(1)
+      offset = (max(page, 1) - 1) * size
+      Repo.all(from g in q, limit: ^size, offset: ^offset)
     else
-      Repo.all(q)
+      # No pagination requested: cap to a hard max so an unpaginated caller
+      # never triggers an unbounded Repo.all over the whole table.
+      Repo.all(from g in q, limit: @max_page_size)
     end
   end
 

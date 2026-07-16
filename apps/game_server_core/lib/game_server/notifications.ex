@@ -119,6 +119,24 @@ defmodule GameServer.Notifications do
     |> Repo.all()
   end
 
+  @doc """
+  Returns the `limit` most recent notifications, ordered oldest-first (so they
+  can be replayed in chronological order on connect without loading the user's
+  entire history).
+  """
+  @spec list_recent_notifications(String.t(), pos_integer()) :: [Notification.t()]
+  def list_recent_notifications(user_id, limit)
+      when is_binary(user_id) and is_integer(limit) and limit > 0 do
+    from(n in Notification,
+      where: n.recipient_id == ^user_id,
+      order_by: [desc: n.inserted_at, desc: n.id],
+      limit: ^limit,
+      preload: [:sender]
+    )
+    |> Repo.all()
+    |> Enum.reverse()
+  end
+
   @doc "Count total notifications for a user."
   @spec count_notifications(user_id()) :: non_neg_integer()
   @decorate cacheable(

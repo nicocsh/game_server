@@ -832,8 +832,13 @@ defmodule GameServer.Lobbies do
 
             _ = invalidate_lobby_cache(updated.id)
 
+            # Materialize members once here so the per-socket channel fan-out
+            # serializes the already-loaded list instead of each subscriber
+            # re-querying (was O(N) queries / O(N²) rows per update).
+            with_members = %{updated | memberships: get_lobby_members(updated.id)}
+
             # broadcast updates so any UI/channel subscribers get the change
-            broadcast_lobby(updated.id, {:lobby_updated, updated})
+            broadcast_lobby(updated.id, {:lobby_updated, with_members})
             broadcast_lobbies({:lobby_updated, updated})
             {:ok, updated}
 
@@ -1399,15 +1404,20 @@ defmodule GameServer.Lobbies do
     end
   end
 
+  @max_page_size 1000
+
   defp paginate(q, opts) do
-    page = Keyword.get(opts, :page, nil)
-    page_size = Keyword.get(opts, :page_size, nil)
+    page = Keyword.get(opts, :page)
+    page_size = Keyword.get(opts, :page_size)
 
     if page && page_size do
-      offset = (page - 1) * page_size
-      Repo.all(from l in q, limit: ^page_size, offset: ^offset)
+      size = page_size |> min(@max_page_size) |> max(1)
+      offset = (max(page, 1) - 1) * size
+      Repo.all(from l in q, limit: ^size, offset: ^offset)
     else
-      Repo.all(q)
+      # No pagination requested: cap to a hard max so an unpaginated caller
+      # never triggers an unbounded Repo.all over the whole table.
+      Repo.all(from l in q, limit: @max_page_size)
     end
   end
 

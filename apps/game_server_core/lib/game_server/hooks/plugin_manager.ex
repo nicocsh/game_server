@@ -67,32 +67,27 @@ defmodule GameServer.Hooks.PluginManager do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @snapshot_key {__MODULE__, :snapshot}
+
+  # Reads go through a :persistent_term snapshot refreshed on every reload, so
+  # hot callers (hook dispatch on every KV read / presence event) never serialize
+  # through the GenServer and a reload can't head-of-line-block them.
   @spec list() :: [Plugin.t()]
-  def list do
-    case GenServer.whereis(__MODULE__) do
-      nil -> []
-      _pid -> GenServer.call(__MODULE__, :list)
-    end
-  end
+  def list, do: snapshot().list
 
   @spec lookup(plugin_name()) :: {:ok, Plugin.t()} | {:error, term()}
   def lookup(name) when is_binary(name) do
-    case GenServer.whereis(__MODULE__) do
-      nil -> {:error, :not_running}
-      _pid -> GenServer.call(__MODULE__, {:lookup, name})
+    case Map.fetch(snapshot().by_name, name) do
+      {:ok, plugin} -> {:ok, plugin}
+      :error -> {:error, :not_found}
     end
   end
 
   @spec hook_modules() :: [{plugin_name(), module()}]
-  def hook_modules do
-    list()
-    |> Enum.flat_map(fn
-      %Plugin{name: name, hooks_module: mod, status: :ok} when is_atom(mod) and not is_nil(mod) ->
-        [{name, mod}]
+  def hook_modules, do: snapshot().hook_modules
 
-      _ ->
-        []
-    end)
+  defp snapshot do
+    :persistent_term.get(@snapshot_key, %{list: [], by_name: %{}, hook_modules: []})
   end
 
   @spec reload() :: [Plugin.t()]
@@ -196,15 +191,6 @@ defmodule GameServer.Hooks.PluginManager do
   end
 
   @impl true
-  def handle_call(:list, _from, state), do: {:reply, state_to_list(state), state}
-
-  def handle_call({:lookup, name}, _from, state) do
-    case Map.fetch(state, name) do
-      {:ok, plugin} -> {:reply, {:ok, plugin}, state}
-      :error -> {:reply, {:error, :not_found}, state}
-    end
-  end
-
   def handle_call(:reload, _from, state) do
     state = do_reload(state)
 
@@ -226,6 +212,24 @@ defmodule GameServer.Hooks.PluginManager do
     state
     |> Map.values()
     |> Enum.sort_by(& &1.name)
+  end
+
+  # Refresh the lock-free read snapshot; called after every state change.
+  defp publish_snapshot(state) when is_map(state) do
+    list = state_to_list(state)
+
+    hook_modules =
+      Enum.flat_map(list, fn
+        %Plugin{name: name, hooks_module: mod, status: :ok}
+        when is_atom(mod) and not is_nil(mod) ->
+          [{name, mod}]
+
+        _ ->
+          []
+      end)
+
+    :persistent_term.put(@snapshot_key, %{list: list, by_name: state, hook_modules: hook_modules})
+    state
   end
 
   defp format_rpc_context(plugin, fn_name, args, opts) do
@@ -293,8 +297,9 @@ defmodule GameServer.Hooks.PluginManager do
     |> Map.values()
     |> Enum.each(&stop_unload_plugin/1)
 
-    # Load current plugin dirs.
+    # Load current plugin dirs, then refresh the lock-free read snapshot.
     load_plugins_from_disk()
+    |> publish_snapshot()
   end
 
   defp stop_unload_plugin(%Plugin{app: app, hooks_module: hooks_mod} = plugin)

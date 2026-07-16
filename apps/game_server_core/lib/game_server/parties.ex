@@ -71,6 +71,12 @@ defmodule GameServer.Parties do
     Phoenix.PubSub.unsubscribe(GameServer.PubSub, "party:#{party_id}")
   end
 
+  # Preload members once so per-socket channel serialization reuses them
+  # instead of each subscriber re-querying get_party_members/1.
+  defp with_party_members(%Party{} = party) do
+    %{party | members: get_party_members(party.id)}
+  end
+
   defp broadcast_party(party_id, event) do
     Phoenix.PubSub.broadcast(GameServer.PubSub, "party:#{party_id}", event)
   end
@@ -1053,7 +1059,7 @@ defmodule GameServer.Parties do
         |> Repo.update()
         |> case do
           {:ok, updated} ->
-            broadcast_party(updated.id, {:party_updated, updated})
+            broadcast_party(updated.id, {:party_updated, with_party_members(updated)})
 
             GameServer.Async.run(fn ->
               GameServer.Hooks.internal_call(:after_party_update, [updated])
@@ -1585,7 +1591,7 @@ defmodule GameServer.Parties do
 
     case result do
       {:ok, updated} ->
-        broadcast_party(updated.id, {:party_updated, updated.id})
+        broadcast_party(updated.id, {:party_updated, with_party_members(updated)})
         broadcast_parties({:party_updated, updated.id})
         result
 

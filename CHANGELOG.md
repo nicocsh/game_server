@@ -29,6 +29,12 @@
 - [fixed] Search filters escape `LIKE` wildcards consistently.
 - [fixed] Cross-instance cache invalidation now also covers version-counter caches (leaderboards, groups, lobbies, parties, friends, chat, notifications, achievements, KV lists); revocation re-warms the user cache to close a race that could keep a revoked JWT valid until TTL.
 
+- [perf] **Lobby/party update broadcasts no longer re-query members per subscriber** — members are materialized once at the source (was O(N) queries / O(N²) rows per update).
+- [perf] **Plugin hook-module lookups are lock-free** (`:persistent_term` snapshot refreshed on reload) instead of a `GenServer.call` per hook — removes a system-wide serialization point and reload head-of-line blocking on hot paths (e.g. `before_kv_get`).
+- [perf] **User-channel connect replays only the 50 most recent notifications** (was up to 1000, one frame each); older ones load via the REST API.
+- [perf] **Disconnect offline-check is O(sockets-for-this-user)** via a per-user registry key (was O(all connected user channels)); the presence heartbeat updates the cached user in place instead of busting it every few minutes.
+- [perf] **List queries never run an unbounded `Repo.all`** — `list_lobbies`/`list_groups` cap at a hard max page size; the lobby-list channel prunes its per-socket delta cache on lobby deletion.
+
 # April 2026
 
 - [changed] Root host app restructure.

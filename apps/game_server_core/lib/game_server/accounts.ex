@@ -345,7 +345,23 @@ defmodule GameServer.Accounts do
     from(u in User, where: u.id == ^user_id)
     |> Repo.update_all(set: [last_seen_at: now, is_online: true])
 
-    GameServer.Cache.invalidate({:accounts, :user, user_id})
+    # Update the cached struct in place rather than busting it: this runs every
+    # few minutes per connected socket, and a delete would force cold get_user
+    # reads on the lobby/party/group hot paths right after each heartbeat. Other
+    # nodes keep last_seen within the TTL, which is fine for presence data.
+    case GameServer.Cache.get!({:accounts, :user, user_id}) do
+      %User{} = cached ->
+        _ =
+          GameServer.Cache.put(
+            {:accounts, :user, user_id},
+            %{cached | last_seen_at: now, is_online: true},
+            ttl: @user_cache_ttl_ms
+          )
+
+      _ ->
+        :ok
+    end
+
     :ok
   end
 
