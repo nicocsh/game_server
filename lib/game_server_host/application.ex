@@ -51,7 +51,9 @@ defmodule GameServerHost.Application do
       # Prune old chat messages / notifications / payment events (RETENTION_* env vars)
       GameServer.Retention,
       # Quantum scheduler for cron-like jobs
-      GameServer.Schedule.Scheduler
+      GameServer.Schedule.Scheduler,
+      # Worker that drives the matchmaking sweep
+      GameServer.Matchmaking.Worker
     ]
 
     opts = [strategy: :one_for_one, name: GameServerHost.Supervisor]
