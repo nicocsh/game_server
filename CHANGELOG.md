@@ -1,5 +1,6 @@
 # July 2026
 
+- [added] **Lobby snapshots** — durable per-run record of lobby state, opt-in via `LOBBY_SNAPSHOTS_ENABLED`.
 - [added] **Matchmaking** (ticket queue), admin page and hooks.
 - [added] **Party matchmaking**, matched as one unit.
 - [breaking] Matchmaking join/cancel via HTTP.

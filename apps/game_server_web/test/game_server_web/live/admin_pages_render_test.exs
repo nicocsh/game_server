@@ -32,7 +32,8 @@ defmodule GameServerWeb.AdminPagesRenderTest do
     {"/admin/chat", "Chat"},
     {"/admin/achievements", "Achievements"},
     {"/admin/payments", "Payments"},
-    {"/admin/translations", "Translation"}
+    {"/admin/translations", "Translation"},
+    {"/admin/lobby-snapshots", "Lobby snapshots"}
   ]
 
   defp create_admin(_context) do

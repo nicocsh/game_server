@@ -21,6 +21,19 @@ defmodule Mix.Tasks.Demo.Seed do
     * `leaderboard` — a leaderboard with N scored records
     * `group`       — a public group with N members
     * `tournament`  — a tournament with N registered entries, still open
+    * `lobby_snapshot` — recorded runs for `/admin/lobby-snapshots`, capped at 12
+      regardless of `--count` (this set is about having something to read, not
+      volume)
+
+  The `lobby_snapshot` set goes through the real `capture_lobby/3` path rather
+  than inserting rows, so what you see is shaped exactly like production data —
+  including content-addressed section dedup. One of its runs reproduces the July
+  2026 rubber-banding bug (a distance that reverts between snapshots), which is
+  the case the section diff exists to make obvious.
+
+  Seeded runs keep their lobby row so `--clean` can find them again. Real
+  completed runs outlive theirs, since a lobby is deleted when its last member
+  leaves.
 
   All sets share one pool of N anonymous device accounts, so the same players
   appear across them (as they would in a real deployment).
@@ -39,6 +52,11 @@ defmodule Mix.Tasks.Demo.Seed do
   alias GameServer.Groups.GroupMember
   alias GameServer.Leaderboards.Leaderboard
   alias GameServer.Leaderboards.Record
+  alias GameServer.Lobbies.Lobby
+  alias GameServer.LobbySnapshots
+  alias GameServer.LobbySnapshots.Event, as: SnapshotEvent
+  alias GameServer.LobbySnapshots.Snapshot
+  alias GameServer.LobbySnapshots.Writer
   alias GameServer.Repo
   alias GameServer.Tournaments.Entry
   alias GameServer.Tournaments.Tournament
@@ -50,7 +68,9 @@ defmodule Mix.Tasks.Demo.Seed do
   @tournament_slug "demo-seed-cup"
   @default_count 1000
   @batch 500
-  @all_sets ~w(leaderboard group tournament)
+  @all_sets ~w(leaderboard group tournament lobby_snapshot)
+  @lobby_title_prefix "Demo Seed Run"
+  @max_runs 12
 
   @impl Mix.Task
   def run(args) do
@@ -72,6 +92,7 @@ defmodule Mix.Tasks.Demo.Seed do
         "leaderboard" -> seed_leaderboard(users)
         "group" -> seed_group(users)
         "tournament" -> seed_tournament(users)
+        "lobby_snapshot" -> seed_lobby_snapshots(users)
       end)
 
       GameServer.Cache.delete_all()
@@ -265,6 +286,9 @@ defmodule Mix.Tasks.Demo.Seed do
     if group, do: Repo.delete(group)
     if tournament, do: Repo.delete(tournament)
 
+    # Before the players go: seeded lobbies reference them as host.
+    clean_lobby_snapshots()
+
     {users, _} = Repo.delete_all(from(u in User, where: like(u.device_id, ^"#{@prefix}-%")))
 
     GameServer.Cache.delete_all()
@@ -299,6 +323,213 @@ defmodule Mix.Tasks.Demo.Seed do
       found ->
         found
     end
+  end
+
+  # ── Lobby snapshots ───────────────────────────────────────────────────────
+
+  defp seed_lobby_snapshots(user_ids) do
+    previous = Application.get_env(:game_server_core, GameServer.LobbySnapshots, [])
+
+    # Capture is off by default, so force it on for the duration rather than
+    # making the operator set an env var to seed demo data.
+    Application.put_env(
+      :game_server_core,
+      GameServer.LobbySnapshots,
+      Keyword.merge(previous, enabled: true)
+    )
+
+    hosts = Enum.take(user_ids, @max_runs)
+    info("recording #{length(hosts)} runs (this set ignores --count)")
+
+    hosts
+    |> Enum.with_index()
+    |> Enum.each(fn {host_id, index} -> record_run(host_id, index) end)
+
+    Writer.flush()
+    backdate_runs()
+
+    Application.put_env(:game_server_core, GameServer.LobbySnapshots, previous)
+  end
+
+  # Run 0 is the interesting one: it replays the shape of the July 2026
+  # rubber-banding bug, where the boat's distance and the slow's anchor both
+  # revert. Expanding snapshot 4 in the admin view shows it as a change *back*.
+  defp record_run(host_id, 0), do: play(host_id, "rubber-band", rubber_band_frames())
+  defp record_run(host_id, 1), do: play(host_id, "hook error", error_frames())
+  defp record_run(host_id, index), do: play(host_id, "run #{index}", normal_frames(index))
+
+  defp play(host_id, label, frames) do
+    {:ok, lobby} =
+      GameServer.Lobbies.create_lobby(%{
+        title: "#{@lobby_title_prefix} — #{label}",
+        host_id: host_id,
+        max_users: 4
+      })
+
+    Enum.each(frames, fn frame ->
+      {:ok, _} =
+        GameServer.Lobbies.update_lobby(
+          Repo.get!(Lobby, lobby.id),
+          %{metadata: frame.metadata}
+        )
+
+      LobbySnapshots.capture_lobby(lobby.id, frame.trigger,
+        sync: true,
+        flagged: Map.get(frame, :flagged, false),
+        user_id: host_id
+      )
+
+      Enum.each(Map.get(frame, :events, []), fn {kind, payload} ->
+        LobbySnapshots.record_event(lobby.id, kind, payload, user_id: host_id)
+      end)
+    end)
+  end
+
+  defp boat(distance, speed, anchor) do
+    %{
+      "boat_adventure" => %{
+        "distance" => distance,
+        "speed" => speed,
+        "effects" => %{
+          "speed_reduced" => %{"distance_at_start" => anchor, "duration_ms" => 4000}
+        },
+        "actors" => [%{"type" => "starfish", "wave" => 1, "hp" => 2}]
+      },
+      "word_match" => %{"score" => round(distance / 10), "current_word" => "harbour"},
+      "game_state" => "running"
+    }
+  end
+
+  defp rubber_band_frames do
+    [
+      %{trigger: "hook:start_boat_game", metadata: boat(0.0, 100, 0.0)},
+      %{
+        trigger: "hook:guess_word",
+        metadata: boat(120.0, 100, 0.0),
+        events: [{"boat.speed", %{"from" => 100, "to" => 100, "gap" => 91.2}}]
+      },
+      %{
+        trigger: "timer:scheduled_collision",
+        metadata: boat(250.0, 50, 250.0),
+        events: [
+          {"boat.collision", %{"actor" => "starfish", "wave" => 1, "damage" => 1}},
+          {"boat.speed", %{"from" => 100, "to" => 50, "gap" => 78.39, "targets_ahead" => 8}}
+        ]
+      },
+      %{trigger: "hook:guess_word", metadata: boat(370.0, 50, 250.0)},
+      # The bug: a stale client echo re-anchors the slow, dragging distance back.
+      %{
+        trigger: "hook:guess_word",
+        metadata: boat(250.0, 50, 250.0),
+        events: [{"boat.merge_divergence", %{"current" => 370.0, "incoming" => 250.0}}]
+      },
+      %{trigger: "hook:guess_word", metadata: boat(480.0, 100, 250.0)},
+      %{trigger: "lobby:deleted", metadata: boat(480.0, 100, 250.0) |> finished()}
+    ]
+  end
+
+  defp error_frames do
+    [
+      %{trigger: "hook:start_boat_game", metadata: boat(0.0, 100, 0.0)},
+      %{trigger: "hook:guess_word", metadata: boat(90.0, 100, 0.0)},
+      %{
+        trigger: "hook:finish_boat_game",
+        metadata: boat(90.0, 100, 0.0),
+        flagged: true,
+        events: [{"hook.error", %{"reason" => "function_clause", "hook" => "finish_boat_game"}}]
+      }
+    ]
+  end
+
+  defp normal_frames(index) do
+    steps = 3 + rem(index, 3)
+
+    frames =
+      for step <- 0..steps do
+        distance = step * 140.0 + index * 10
+        speed = if rem(step, 3) == 2, do: 50, else: 100
+
+        %{
+          trigger: if(step == 0, do: "hook:start_boat_game", else: "hook:guess_word"),
+          metadata: boat(distance, speed, if(speed == 50, do: distance, else: 0.0)),
+          events:
+            if(speed == 50,
+              do: [{"boat.speed", %{"from" => 100, "to" => 50, "gap" => 62.5}}],
+              else: []
+            )
+        }
+      end
+
+    # Every run ends the way a real one does: the last member leaves and the
+    # lobby is torn down.
+    teardown = %{trigger: "lobby:deleted", metadata: finished(List.last(frames).metadata)}
+
+    Enum.reverse([teardown | Enum.reverse(frames)])
+  end
+
+  defp finished(metadata), do: put_in(metadata, ["game_state"], "finished")
+
+  # Captures happen milliseconds apart, which makes every run look simultaneous
+  # in the list view. Spread them so durations and start times read like real
+  # sessions — and so the retention window has something meaningful to act on.
+  defp backdate_runs do
+    lobby_ids =
+      from(l in Lobby,
+        where: like(l.title, ^"#{@lobby_title_prefix}%"),
+        order_by: l.inserted_at,
+        select: l.id
+      )
+      |> Repo.all()
+
+    lobby_ids
+    |> Enum.with_index()
+    |> Enum.each(fn {lobby_id, run_index} ->
+      started = DateTime.add(DateTime.utc_now(), -(run_index * 5 + 1) * 3600, :second)
+
+      shift_rows(Snapshot, lobby_id, started)
+      shift_rows(SnapshotEvent, lobby_id, started)
+    end)
+  end
+
+  defp shift_rows(schema, lobby_id, started) do
+    ids =
+      from(r in schema,
+        where: r.lobby_id == ^lobby_id,
+        order_by: [asc: r.inserted_at, asc: r.id],
+        select: r.id
+      )
+      |> Repo.all()
+
+    ids
+    |> Enum.with_index()
+    |> Enum.each(fn {id, step} ->
+      at = DateTime.add(started, step * 6, :second)
+      Repo.update_all(from(r in schema, where: r.id == ^id), set: [inserted_at: at])
+    end)
+  end
+
+  defp clean_lobby_snapshots do
+    lobby_ids =
+      from(l in Lobby, where: like(l.title, ^"#{@lobby_title_prefix}%"))
+      |> Repo.all()
+      |> Enum.map(& &1.id)
+
+    if lobby_ids != [] do
+      Repo.delete_all(from(s in Snapshot, where: s.lobby_id in ^lobby_ids))
+
+      Repo.delete_all(from(e in SnapshotEvent, where: e.lobby_id in ^lobby_ids))
+
+      Enum.each(lobby_ids, fn id ->
+        case Repo.get(Lobby, id) do
+          nil -> :ok
+          lobby -> GameServer.Lobbies.delete_lobby(lobby)
+        end
+      end)
+    end
+
+    # Blobs are content-addressed and may be shared with real runs, so they are
+    # left for the retention sweep's reference-aware GC rather than deleted here.
+    info("removed #{length(lobby_ids)} seeded runs")
   end
 
   defp info(message), do: Mix.shell().info("  #{message}")

@@ -369,7 +369,29 @@ if config_env() == :prod do
   config :game_server_core, GameServer.Retention,
     chat_messages_days: GameServer.Env.integer("RETENTION_CHAT_DAYS", 0),
     notifications_days: GameServer.Env.integer("RETENTION_NOTIFICATIONS_DAYS", 0),
-    payment_events_days: GameServer.Env.integer("RETENTION_PAYMENT_EVENTS_DAYS", 0)
+    payment_events_days: GameServer.Env.integer("RETENTION_PAYMENT_EVENTS_DAYS", 0),
+    # Defaults to a real window rather than "keep forever" like the others:
+    # snapshots hold user metadata and KV, and account deletion cannot reach
+    # data embedded in JSONB, so this is the control that bounds it.
+    lobby_snapshots_days: GameServer.Env.integer("RETENTION_LOBBY_SNAPSHOTS_DAYS", 30),
+    lobby_snapshots_flagged_days:
+      GameServer.Env.integer("RETENTION_LOBBY_SNAPSHOTS_FLAGGED_DAYS", 90)
+
+  # Durable per-run record of lobby state changes, for debugging bad runs.
+  # Off by default: it stores user metadata and KV, so switching it on is a
+  # deliberate privacy decision and the retention window is the mechanism that
+  # bounds it (account deletion cannot reach data embedded in JSONB).
+  config :game_server_core, GameServer.LobbySnapshots,
+    enabled: GameServer.Env.bool("LOBBY_SNAPSHOTS_ENABLED", false),
+    # User-scoped KV keys to capture, comma-separated. Empty captures none — the
+    # widest privacy exposure in a snapshot, so it is opt-in per key rather than
+    # a blanket dump.
+    user_kv_keys:
+      (System.get_env("LOBBY_SNAPSHOTS_USER_KV_KEYS") || "")
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == "")),
+    max_kv_entries: GameServer.Env.integer("LOBBY_SNAPSHOTS_MAX_KV_ENTRIES", 200)
 
   # Realtime update debouncing. Holds outbound state updates ("updated",
   # "member_updated", "lobby_updated", "group_updated") for this many

@@ -339,13 +339,21 @@ defmodule GameServer.Hooks do
             end
           end)
 
-        case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
-          {:ok, {:ok, res}} -> {:ok, res}
-          {:ok, {:error, err}} -> {:error, err}
-          {:ok, res} -> {:ok, res}
-          nil -> {:error, :timeout}
-          {:exit, reason} -> {:error, {:exit, reason}}
-        end
+        result =
+          case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
+            {:ok, {:ok, res}} -> {:ok, res}
+            {:ok, {:error, err}} -> {:error, err}
+            {:ok, res} -> {:ok, res}
+            nil -> {:error, :timeout}
+            {:exit, reason} -> {:error, {:exit, reason}}
+          end
+
+        # Snapshot the caller's lobby now that the mutation finished, errors
+        # included — a failed hook is the case most worth having a record of.
+        # No-op unless lobby snapshots are enabled.
+        _ = GameServer.LobbySnapshots.capture_hook(name, Keyword.get(opts, :caller), result)
+
+        result
     end
   end
 

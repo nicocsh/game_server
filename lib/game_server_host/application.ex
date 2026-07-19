@@ -55,7 +55,10 @@ defmodule GameServerHost.Application do
       # Quantum scheduler for cron-like jobs
       GameServer.Schedule.Scheduler,
       # Worker that drives the matchmaking sweep
-      GameServer.Matchmaking.Worker
+      GameServer.Matchmaking.Worker,
+      # Buffers lobby snapshots/events and assigns seq. :global-registered, so
+      # only one node runs it and start_link returns :ignore on the others.
+      GameServer.LobbySnapshots.Writer
     ]
 
     opts = [strategy: :one_for_one, name: GameServerHost.Supervisor]

@@ -84,6 +84,9 @@ defmodule GameServerWeb.AdminLive.Index do
           <.link navigate={~p"/admin/logs"} class="btn btn-outline">
             Logs ({@log_recent_errors} errors/1h)
           </.link>
+          <.link navigate={~p"/admin/lobby-snapshots"} class="btn btn-outline">
+            Lobby Snapshots ({@lobby_snapshot_runs.total})
+          </.link>
           <.link navigate={~p"/admin/geo"} class="btn btn-outline">
             Geo Traffic ({format_number(@geo_total_1h)}/1h)
           </.link>
@@ -488,7 +491,29 @@ defmodule GameServerWeb.AdminLive.Index do
                 </div>
               </div>
 
-              <%!-- 16. Logs --%>
+              <%!-- 16. Lobby snapshots --%>
+              <div class="card bg-base-100 p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="text-sm font-semibold">Lobby snapshots</div>
+                  <.link navigate={~p"/admin/lobby-snapshots"} class="link link-primary text-xs">
+                    View →
+                  </.link>
+                </div>
+                <div class="text-2xl font-bold">
+                  {@lobby_snapshot_runs.total}
+                  <span class="text-sm font-normal text-base-content/60 ml-1">recent runs</span>
+                </div>
+                <div class="text-xs text-base-content/60 mt-2 space-y-1">
+                  <div class="flex justify-between">
+                    <span>Flagged</span>
+                    <span class={["font-mono", @lobby_snapshot_runs.flagged > 0 && "text-error"]}>
+                      {@lobby_snapshot_runs.flagged}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <%!-- 17. Logs --%>
               <div class="card bg-base-100 p-4">
                 <div class="flex items-center justify-between mb-2">
                   <div class="text-sm font-semibold">Logs</div>
@@ -704,6 +729,7 @@ defmodule GameServerWeb.AdminLive.Index do
        log_level_counts: log_level_counts,
        log_total_buffered: log_total_buffered,
        log_recent_errors: log_recent_errors,
+       lobby_snapshot_runs: safe_lobby_snapshot_runs(),
        users_registered_1d: r.users_registered_1d,
        users_registered_7d: r.users_registered_7d,
        users_registered_30d: r.users_registered_30d,
@@ -880,5 +906,14 @@ defmodule GameServerWeb.AdminLive.Index do
     GameServerWeb.AdminLogBuffer.count_recent_errors(3600)
   rescue
     _ -> 0
+  end
+
+  defp safe_lobby_snapshot_runs do
+    %{
+      total: length(GameServer.LobbySnapshots.list_lobbies(limit: 50)),
+      flagged: length(GameServer.LobbySnapshots.list_lobbies(limit: 50, flagged_only: true))
+    }
+  rescue
+    _ -> %{total: 0, flagged: 0}
   end
 end

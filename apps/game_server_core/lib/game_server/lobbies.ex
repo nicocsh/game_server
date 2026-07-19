@@ -905,6 +905,12 @@ defmodule GameServer.Lobbies do
     Repo.transaction(fn ->
       AdvisoryLock.lock(:lobby, lobby_id)
 
+      # Before anything is unwound: members are about to be detached and the
+      # lobby's KV deleted, so this is the last moment the run's final state is
+      # readable. Gathered synchronously for that reason; the write itself is
+      # buffered outside this transaction, so a rollback still keeps the record.
+      _ = GameServer.LobbySnapshots.capture_lobby(lobby_id, "lobby:deleted", sync: true)
+
       member_ids = Repo.all(from u in User, where: u.lobby_id == ^lobby_id, select: u.id)
 
       _ =
@@ -1080,6 +1086,7 @@ defmodule GameServer.Lobbies do
 
         [] ->
           # no members left - delete lobby
+          _ = GameServer.LobbySnapshots.capture_lobby(lobby.id, "lobby:emptied", sync: true)
           _ = Repo.delete(lobby)
           _ = invalidate_lobby_cache(lobby.id)
           :lobby_deleted
