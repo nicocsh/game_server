@@ -158,12 +158,17 @@ jobs:
       - name: Install dependencies
         run: MIX_ENV=dev mix deps.get
 
+      # The umbrella apps are path deps, so they land in the *deps* PLT. Its
+      # cache key is mix.lock, which does not change when app source does — so
+      # the .plt.hash is deliberately not cached: restoring it would make
+      # dialyxir report "PLT is up to date" and skip revalidation, and every
+      # module added since the cache was written would look like it does not
+      # exist. Without the hash it revalidates and updates the PLT in place.
       - name: Cache PLTs
         uses: actions/cache@v4
         with:
           path: |
             _build/dev/*.plt
-            _build/dev/*.plt.hash
           key: plt-${{ runner.os }}-${{ hashFiles('mix.lock') }}
           restore-keys: |
             plt-${{ runner.os }}-

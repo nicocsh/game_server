@@ -300,6 +300,14 @@ def matchmaking_form_matches(_params, _tickets), do: :default</code></pre>
               </td>
             </tr>
             <tr>
+              <td>{doc_text("A party holding a blocked pair cannot queue")}</td>
+              <td>
+                {doc_text(
+                  "409 party_has_blocked_pair. An invite cannot put a blocked pair in a party, but blocking someone already in it can. Such a party is unseatable, so it is refused at join rather than losing a member to a failed lobby."
+                )}
+              </td>
+            </tr>
+            <tr>
               <td>{doc_text("One queued ticket per player")}</td>
               <td>
                 {doc_text(

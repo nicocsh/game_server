@@ -10,6 +10,7 @@
 - [added] Admin blacklist page, `GET /me/blacklist`.
 - [added] `bypass_lock` join option.
 - [fixed] Party invites check every member's blocks.
+- [fixed] Parties with a blocked pair refused at queue.
 - [fixed] Lobby-scoped KV cleared on leave.
 - [fixed] Default hooks shadowing plugin hooks.
 - [added] Player search on public pages.
