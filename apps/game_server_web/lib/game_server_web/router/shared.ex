@@ -558,13 +558,32 @@ defmodule GameServerWeb.Router.Shared do
     end
   end
 
-  defmacro game_server_admin_live_routes(on_mount) do
+  @doc """
+  Core's admin LiveView routes, optionally extended with host-specific ones.
+
+  The `do` block is spliced into the same `live_session`, so host routes get the
+  admin pipeline and `on_mount` chain without the host restating them:
+
+      game_server_admin_live_routes @require_admin_on_mount do
+        live "/admin/my-thing", MyThingLive, :index
+      end
+
+  It exists so a host that needs one extra admin page does not fork the whole
+  list to get it. A fork looks harmless and then silently rots — every core
+  admin page added afterwards is missing from that host, with no error, just a
+  404 nobody connects to the change that caused it.
+  """
+  defmacro game_server_admin_live_routes(on_mount, opts \\ []) do
+    host_routes = Keyword.get(opts, :do)
+
     quote do
       scope "/", GameServerWeb do
         pipe_through [:browser, :require_admin_user]
 
         live_session :require_admin,
           on_mount: unquote(on_mount) do
+          unquote(host_routes)
+
           live "/admin", AdminLive.Index, :index
           live "/admin/config", AdminLive.Config, :index
           live "/admin/kv", AdminLive.KV, :index

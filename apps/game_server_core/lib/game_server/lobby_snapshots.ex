@@ -180,7 +180,7 @@ defmodule GameServer.LobbySnapshots do
   hook call pays one `Application.get_env` when capture is disabled and one task
   spawn when it is on.
   """
-  @spec capture_hook(atom(), term(), term()) :: :ok
+  @spec capture_hook(atom() | String.t(), term(), term()) :: :ok
   def capture_hook(name, caller, result) do
     if enabled?() do
       flagged = match?({:error, _}, result)
@@ -336,9 +336,20 @@ defmodule GameServer.LobbySnapshots do
         []
 
       keys ->
+        page_size = config(:max_kv_entries, 200)
+
         Enum.flat_map(members, fn %{id: user_id} ->
-          [user_id: user_id, key: keys, page_size: config(:max_kv_entries, 200)]
-          |> GameServer.KV.list_entries()
+          # `KV.list_entries/1` takes ONE `:key` — a substring LIKE filter, not
+          # a list. Passing the configured list raised FunctionClauseError in
+          # `normalize_key_filter/1` and failed the whole gather, so every run
+          # with `user_kv_keys` set recorded nothing. Query per key and merge.
+          keys
+          |> Enum.flat_map(fn key ->
+            GameServer.KV.list_entries(user_id: user_id, key: key, page_size: page_size)
+          end)
+          # A key can match several filters (`word_stats` and `word_stats:en`),
+          # and the same entry must not be captured twice.
+          |> Enum.uniq_by(&{&1.key, &1.user_id, &1.lobby_id})
           |> Enum.map(&kv_entry_section/1)
         end)
     end
@@ -558,9 +569,55 @@ defmodule GameServer.LobbySnapshots do
 
   ## Config
 
+  @doc """
+  The resolved value of a config key, for tests and diagnostics.
+
+  Exposed so the resolution order (app env, then environment) can be asserted
+  against the real code path rather than a copy of it.
+  """
+  @spec resolved_config(atom(), term()) :: term()
+  def resolved_config(key, default \\ nil) when is_atom(key), do: config(key, default)
+
+  # Reads app env first, then falls back to the environment directly.
+  #
+  # The fallback is the point. A host app evaluates its OWN config/runtime.exs,
+  # never core's, so a `config :game_server_core, ...` block core ships is not
+  # something a host inherits — it is something a host must copy, and until it
+  # does, LOBBY_SNAPSHOTS_ENABLED=true parses fine and changes nothing. There is
+  # no compile error for the missing block and no warning at boot; the admin
+  # page just says capture is off while the operator can see they turned it on.
+  #
+  # Reading env here makes the documented variables work in any host with no
+  # host-side wiring. An explicit app-env block still wins, so a host that wants
+  # to compute these differently (or pin them in test) keeps that control.
   defp config(key, default) do
-    :game_server_core
-    |> Application.get_env(__MODULE__, [])
-    |> Keyword.get(key, default)
+    case Keyword.fetch(Application.get_env(:game_server_core, __MODULE__, []), key) do
+      {:ok, value} -> value
+      :error -> env_config(key, default)
+    end
   end
+
+  defp env_config(:enabled, default), do: GameServer.Env.bool("LOBBY_SNAPSHOTS_ENABLED", default)
+
+  defp env_config(:max_kv_entries, default),
+    do: GameServer.Env.integer("LOBBY_SNAPSHOTS_MAX_KV_ENTRIES", default)
+
+  defp env_config(:user_kv_keys, default) do
+    case System.get_env("LOBBY_SNAPSHOTS_USER_KV_KEYS") do
+      nil ->
+        default
+
+      raw ->
+        raw
+        |> String.split(",", trim: true)
+        # Values arrive from a shell or a .env file, where `KEY=cargo # note`
+        # keeps the comment as part of the value. Trimming here means a stray
+        # comment costs one ignored key, not a filter that silently matches
+        # nothing.
+        |> Enum.map(&(&1 |> String.split("#", parts: 2) |> hd() |> String.trim()))
+        |> Enum.reject(&(&1 == ""))
+    end
+  end
+
+  defp env_config(_key, default), do: default
 end

@@ -119,6 +119,17 @@ defmodule GameServer.Hooks.PluginManager do
           )
         end
 
+        # Every client-driven hook lands here — HTTP, user channel and WebRTC
+        # DataChannel all route through call_rpc, never through Hooks.do_call/3.
+        # Capturing only there recorded nothing for real traffic, leaving player
+        # intent (the main mutation source) missing from the timeline.
+        _ =
+          GameServer.LobbySnapshots.capture_hook(
+            fn_name,
+            Keyword.get(opts, :caller),
+            result
+          )
+
         result
 
       {:error, _} = err ->

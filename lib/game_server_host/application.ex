@@ -5,61 +5,13 @@ defmodule GameServerHost.Application do
 
   alias GameServer.Hooks.PluginManager
   alias GameServer.Repo.AdvisoryLock
-  alias GameServerWeb.Plugs.GeoCountry
-  alias GameServerWeb.Plugs.IpBan
 
   @impl true
   def start(_type, _args) do
-    Application.start(:os_mon)
+    GameServerWeb.HostSupervision.init_runtime()
     GameServerHost.ContentPaths.register_defaults()
 
-    # Initialize ETS table for Schedule callbacks (before Scheduler starts)
-    GameServer.Schedule.start_link()
-
-    # Initialize ETS table for IP bans
-    IpBan.init_table()
-
-    # Initialize ETS table for geo-country request stats
-    GeoCountry.init_table()
-
-    children = [
-      GameServerWeb.Telemetry,
-      GameServerWeb.PromEx,
-      GameServer.Repo,
-      {GameServer.Cache, []},
-      # Aggregates cache hit/miss + overload counters for the admin dashboard
-      GameServer.Cache.Stats,
-      # Bounded: when full, GameServer.Async runs work inline (back-pressure)
-      {Task.Supervisor, name: GameServer.TaskSupervisor, max_children: 200},
-      {DNSCluster, query: Application.get_env(:game_server_web, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: GameServer.PubSub},
-      # Apply cache invalidations broadcast by other instances
-      GameServer.Cache.Sync,
-      GameServerWeb.ConnectionTracker,
-      # Load persisted IP bans and mirror ban events from other instances
-      GameServerWeb.IpBanSync,
-      {GameServerWeb.RateLimit, clean_period: :timer.minutes(5)},
-      GameServer.Lobbies.SpectatorTracker,
-      GameServerWeb.AdminLogBuffer,
-      # Periodic cleanup of old geo-country minute buckets
-      GameServerWeb.GeoCountryCleaner,
-      # Load hook plugins (OTP apps) shipped under modules/plugins/*
-      GameServer.Hooks.PluginManager,
-      GameServerWeb.Endpoint,
-      # Periodically mark stale online users as offline (safety net for crashes)
-      GameServer.Accounts.StalePresenceSweeper,
-      # Prune old chat messages / notifications / payment events (RETENTION_* env vars)
-      GameServer.Retention,
-      # Tournament lifecycle: transitions, draws, match deadlines, recurrence
-      GameServer.Tournaments.Ticker,
-      # Quantum scheduler for cron-like jobs
-      GameServer.Schedule.Scheduler,
-      # Worker that drives the matchmaking sweep
-      GameServer.Matchmaking.Worker,
-      # Buffers lobby snapshots/events and assigns seq. :global-registered, so
-      # only one node runs it and start_link returns :ignore on the others.
-      GameServer.LobbySnapshots.Writer
-    ]
+    children = GameServerWeb.HostSupervision.children()
 
     opts = [strategy: :one_for_one, name: GameServerHost.Supervisor]
 
