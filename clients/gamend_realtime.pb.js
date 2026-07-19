@@ -6326,6 +6326,605 @@ export const gamend = $root.gamend = (() => {
                 return TournamentEvent;
             })();
 
+            v1.TournamentMatchEvent = (function() {
+
+                /**
+                 * Properties of a TournamentMatchEvent.
+                 * @typedef {Object} gamend.realtime.v1.TournamentMatchEvent.$Properties
+                 * @property {string|null} [tournament_id] TournamentMatchEvent tournament_id
+                 * @property {string|null} [slug] TournamentMatchEvent slug
+                 * @property {string|null} [match_id] TournamentMatchEvent match_id
+                 * @property {number|null} [round] TournamentMatchEvent round
+                 * @property {number|Long|null} [deadline_ms] TournamentMatchEvent deadline_ms
+                 * @property {string|null} [winner_entry_id] TournamentMatchEvent winner_entry_id
+                 * @property {Array.<Uint8Array>} [$unknowns] Unknown fields preserved while decoding when enabled
+                 */
+
+                /**
+                 * Properties of a TournamentMatchEvent.
+                 * @memberof gamend.realtime.v1
+                 * @interface ITournamentMatchEvent
+                 * @augments gamend.realtime.v1.TournamentMatchEvent.$Properties
+                 * @deprecated Use gamend.realtime.v1.TournamentMatchEvent.$Properties instead.
+                 */
+
+                /**
+                 * Shape of a TournamentMatchEvent.
+                 * @typedef {gamend.realtime.v1.TournamentMatchEvent.$Properties} gamend.realtime.v1.TournamentMatchEvent.$Shape
+                 */
+
+                /**
+                 * Constructs a new TournamentMatchEvent.
+                 * @memberof gamend.realtime.v1
+                 * @classdesc Represents a TournamentMatchEvent.
+                 * @constructor
+                 * @param {gamend.realtime.v1.TournamentMatchEvent.$Properties=} [properties] Properties to set
+                 * @property {Array.<Uint8Array>} [$unknowns] Unknown fields preserved while decoding when enabled
+                 */
+                const TournamentMatchEvent = function (properties) {
+                    if (properties)
+                        for (let keys = $Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                this[keys[i]] = properties[keys[i]];
+                };
+
+                /**
+                 * TournamentMatchEvent tournament_id.
+                 * @member {string} tournament_id
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @instance
+                 */
+                TournamentMatchEvent.prototype.tournament_id = "";
+
+                /**
+                 * TournamentMatchEvent slug.
+                 * @member {string} slug
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @instance
+                 */
+                TournamentMatchEvent.prototype.slug = "";
+
+                /**
+                 * TournamentMatchEvent match_id.
+                 * @member {string} match_id
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @instance
+                 */
+                TournamentMatchEvent.prototype.match_id = "";
+
+                /**
+                 * TournamentMatchEvent round.
+                 * @member {number} round
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @instance
+                 */
+                TournamentMatchEvent.prototype.round = 0;
+
+                /**
+                 * TournamentMatchEvent deadline_ms.
+                 * @member {number|Long} deadline_ms
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @instance
+                 */
+                TournamentMatchEvent.prototype.deadline_ms = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * TournamentMatchEvent winner_entry_id.
+                 * @member {string} winner_entry_id
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @instance
+                 */
+                TournamentMatchEvent.prototype.winner_entry_id = "";
+
+                /**
+                 * Encodes the specified TournamentMatchEvent message. Does not implicitly {@link gamend.realtime.v1.TournamentMatchEvent.verify|verify} messages.
+                 * @function encode
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @static
+                 * @param {gamend.realtime.v1.TournamentMatchEvent.$Properties} message TournamentMatchEvent message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                TournamentMatchEvent.encode = function (message, writer, _depth) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (_depth === $undefined)
+                        _depth = 0;
+                    if (_depth > $util.recursionLimit)
+                        throw $Error("max depth exceeded");
+                    if (message.tournament_id != null && $Object.hasOwnProperty.call(message, "tournament_id") && message.tournament_id !== "")
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.tournament_id);
+                    if (message.slug != null && $Object.hasOwnProperty.call(message, "slug") && message.slug !== "")
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.slug);
+                    if (message.match_id != null && $Object.hasOwnProperty.call(message, "match_id") && message.match_id !== "")
+                        writer.uint32(/* id 3, wireType 2 =*/26).string(message.match_id);
+                    if (message.round != null && $Object.hasOwnProperty.call(message, "round") && message.round !== 0)
+                        writer.uint32(/* id 4, wireType 0 =*/32).int32(message.round);
+                    if (message.deadline_ms != null && $Object.hasOwnProperty.call(message, "deadline_ms") && (typeof message.deadline_ms === "object" ? message.deadline_ms.low || message.deadline_ms.high : message.deadline_ms !== 0))
+                        writer.uint32(/* id 5, wireType 0 =*/40).int64(message.deadline_ms);
+                    if (message.winner_entry_id != null && $Object.hasOwnProperty.call(message, "winner_entry_id") && message.winner_entry_id !== "")
+                        writer.uint32(/* id 6, wireType 2 =*/50).string(message.winner_entry_id);
+                    if (message.$unknowns != null && $Object.hasOwnProperty.call(message, "$unknowns"))
+                        for (let i = 0; i < message.$unknowns.length; ++i)
+                            writer.raw(message.$unknowns[i]);
+                    return writer;
+                };
+
+                /**
+                 * Decodes a TournamentMatchEvent message from the specified reader or buffer.
+                 * @function decode
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @static
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {gamend.realtime.v1.TournamentMatchEvent & gamend.realtime.v1.TournamentMatchEvent.$Shape} TournamentMatchEvent
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                TournamentMatchEvent.decode = function (reader, length, _end, _depth, _target) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    if (_depth === $undefined)
+                        _depth = 0;
+                    if (_depth > $Reader.recursionLimit)
+                        throw $Error("max depth exceeded");
+                    let end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.gamend.realtime.v1.TournamentMatchEvent(), value;
+                    while (reader.pos < end) {
+                        let start = reader.pos;
+                        let tag = reader.tag();
+                        if (tag === _end) {
+                            _end = $undefined;
+                            break;
+                        }
+                        let wireType = tag & 7;
+                        switch (tag >>>= 3) {
+                        case 1: {
+                                if (wireType !== 2)
+                                    break;
+                                if ((value = reader.stringVerify()).length)
+                                    message.tournament_id = value;
+                                else
+                                    delete message.tournament_id;
+                                continue;
+                            }
+                        case 2: {
+                                if (wireType !== 2)
+                                    break;
+                                if ((value = reader.stringVerify()).length)
+                                    message.slug = value;
+                                else
+                                    delete message.slug;
+                                continue;
+                            }
+                        case 3: {
+                                if (wireType !== 2)
+                                    break;
+                                if ((value = reader.stringVerify()).length)
+                                    message.match_id = value;
+                                else
+                                    delete message.match_id;
+                                continue;
+                            }
+                        case 4: {
+                                if (wireType !== 0)
+                                    break;
+                                if (value = reader.int32())
+                                    message.round = value;
+                                else
+                                    delete message.round;
+                                continue;
+                            }
+                        case 5: {
+                                if (wireType !== 0)
+                                    break;
+                                if (typeof (value = reader.int64()) === "object" ? value.low || value.high : value !== 0)
+                                    message.deadline_ms = value;
+                                else
+                                    delete message.deadline_ms;
+                                continue;
+                            }
+                        case 6: {
+                                if (wireType !== 2)
+                                    break;
+                                if ((value = reader.stringVerify()).length)
+                                    message.winner_entry_id = value;
+                                else
+                                    delete message.winner_entry_id;
+                                continue;
+                            }
+                        }
+                        reader.skipType(wireType, _depth, tag);
+                        if (!reader.discardUnknown) {
+                            $util.makeProp(message, "$unknowns", false);
+                            (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
+                        }
+                    }
+                    if (_end !== $undefined)
+                        throw $Error("missing end group");
+                    return message;
+                };
+
+                /**
+                 * Creates a TournamentMatchEvent message from a plain object. Also converts values to their respective internal types.
+                 * @function fromObject
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @static
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {gamend.realtime.v1.TournamentMatchEvent} TournamentMatchEvent
+                 */
+                TournamentMatchEvent.fromObject = function (object, _depth) {
+                    if (object instanceof $root.gamend.realtime.v1.TournamentMatchEvent)
+                        return object;
+                    if (!$util.isObject(object))
+                        throw $TypeError(".gamend.realtime.v1.TournamentMatchEvent: object expected");
+                    if (_depth === $undefined)
+                        _depth = 0;
+                    if (_depth > $util.recursionLimit)
+                        throw $Error("max depth exceeded");
+                    let message = new $root.gamend.realtime.v1.TournamentMatchEvent();
+                    if (object.tournament_id != null)
+                        if (typeof object.tournament_id !== "string" || object.tournament_id.length)
+                            message.tournament_id = $String(object.tournament_id);
+                    if (object.slug != null)
+                        if (typeof object.slug !== "string" || object.slug.length)
+                            message.slug = $String(object.slug);
+                    if (object.match_id != null)
+                        if (typeof object.match_id !== "string" || object.match_id.length)
+                            message.match_id = $String(object.match_id);
+                    if (object.round != null)
+                        if ($Number(object.round) !== 0)
+                            message.round = object.round | 0;
+                    if (object.deadline_ms != null)
+                        if (typeof object.deadline_ms === "object" ? object.deadline_ms.low || object.deadline_ms.high : $Number(object.deadline_ms) !== 0)
+                            if ($util.Long)
+                                message.deadline_ms = $util.Long.fromValue(object.deadline_ms, false);
+                            else if (typeof object.deadline_ms === "string")
+                                message.deadline_ms = $parseInt(object.deadline_ms, 10);
+                            else if (typeof object.deadline_ms === "number")
+                                message.deadline_ms = object.deadline_ms;
+                            else if (typeof object.deadline_ms === "object")
+                                message.deadline_ms = new $util.LongBits(object.deadline_ms.low >>> 0, object.deadline_ms.high >>> 0).toNumber();
+                    if (object.winner_entry_id != null)
+                        if (typeof object.winner_entry_id !== "string" || object.winner_entry_id.length)
+                            message.winner_entry_id = $String(object.winner_entry_id);
+                    return message;
+                };
+
+                /**
+                 * Creates a plain object from a TournamentMatchEvent message. Also converts values to other types if specified.
+                 * @function toObject
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @static
+                 * @param {gamend.realtime.v1.TournamentMatchEvent} message TournamentMatchEvent
+                 * @param {$protobuf.IConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                TournamentMatchEvent.toObject = function (message, options, _depth) {
+                    if (!options)
+                        options = {};
+                    if (_depth === $undefined)
+                        _depth = 0;
+                    if (_depth > $util.recursionLimit)
+                        throw $Error("max depth exceeded");
+                    let object = {};
+                    if (options.defaults) {
+                        object.tournament_id = "";
+                        object.slug = "";
+                        object.match_id = "";
+                        object.round = 0;
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.deadline_ms = options.longs === $String ? long.toString() : options.longs === $Number ? long.toNumber() : typeof $BigInt !== "undefined" && options.longs === $BigInt ? long.toBigInt() : long;
+                        } else
+                            object.deadline_ms = options.longs === $String ? "0" : typeof $BigInt !== "undefined" && options.longs === $BigInt ? $BigInt("0") : 0;
+                        object.winner_entry_id = "";
+                    }
+                    if (message.tournament_id != null && $Object.hasOwnProperty.call(message, "tournament_id"))
+                        object.tournament_id = message.tournament_id;
+                    if (message.slug != null && $Object.hasOwnProperty.call(message, "slug"))
+                        object.slug = message.slug;
+                    if (message.match_id != null && $Object.hasOwnProperty.call(message, "match_id"))
+                        object.match_id = message.match_id;
+                    if (message.round != null && $Object.hasOwnProperty.call(message, "round"))
+                        object.round = message.round;
+                    if (message.deadline_ms != null && $Object.hasOwnProperty.call(message, "deadline_ms"))
+                        if (typeof $BigInt !== "undefined" && options.longs === $BigInt)
+                            object.deadline_ms = typeof message.deadline_ms === "number" ? $BigInt(message.deadline_ms) : $util.Long.fromBits(message.deadline_ms.low >>> 0, message.deadline_ms.high >>> 0, false).toBigInt();
+                        else if (typeof message.deadline_ms === "number")
+                            object.deadline_ms = options.longs === $String ? $String(message.deadline_ms) : message.deadline_ms;
+                        else
+                            object.deadline_ms = options.longs === $String ? $util.Long.prototype.toString.call(message.deadline_ms) : options.longs === $Number ? new $util.LongBits(message.deadline_ms.low >>> 0, message.deadline_ms.high >>> 0).toNumber() : message.deadline_ms;
+                    if (message.winner_entry_id != null && $Object.hasOwnProperty.call(message, "winner_entry_id"))
+                        object.winner_entry_id = message.winner_entry_id;
+                    return object;
+                };
+
+                /**
+                 * Converts this TournamentMatchEvent to JSON.
+                 * @function toJSON
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @instance
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                TournamentMatchEvent.prototype.toJSON = function() {
+                    return TournamentMatchEvent.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                /**
+                 * Gets the type url for TournamentMatchEvent
+                 * @function getTypeUrl
+                 * @memberof gamend.realtime.v1.TournamentMatchEvent
+                 * @static
+                 * @param {string} [prefix] Custom type url prefix, defaults to `"type.googleapis.com"`
+                 * @returns {string} The type url
+                 */
+                TournamentMatchEvent.getTypeUrl = function(prefix) {
+                    if (prefix === $undefined)
+                        prefix = "type.googleapis.com";
+                    return prefix + "/gamend.realtime.v1.TournamentMatchEvent";
+                };
+
+                return TournamentMatchEvent;
+            })();
+
+            v1.MatchmakingFound = (function() {
+
+                /**
+                 * Properties of a MatchmakingFound.
+                 * @typedef {Object} gamend.realtime.v1.MatchmakingFound.$Properties
+                 * @property {string|null} [lobby_id] MatchmakingFound lobby_id
+                 * @property {Object.<string,string>|null} [match_params] MatchmakingFound match_params
+                 * @property {Array.<Uint8Array>} [$unknowns] Unknown fields preserved while decoding when enabled
+                 */
+
+                /**
+                 * Properties of a MatchmakingFound.
+                 * @memberof gamend.realtime.v1
+                 * @interface IMatchmakingFound
+                 * @augments gamend.realtime.v1.MatchmakingFound.$Properties
+                 * @deprecated Use gamend.realtime.v1.MatchmakingFound.$Properties instead.
+                 */
+
+                /**
+                 * Shape of a MatchmakingFound.
+                 * @typedef {gamend.realtime.v1.MatchmakingFound.$Properties} gamend.realtime.v1.MatchmakingFound.$Shape
+                 */
+
+                /**
+                 * Constructs a new MatchmakingFound.
+                 * @memberof gamend.realtime.v1
+                 * @classdesc Represents a MatchmakingFound.
+                 * @constructor
+                 * @param {gamend.realtime.v1.MatchmakingFound.$Properties=} [properties] Properties to set
+                 * @property {Array.<Uint8Array>} [$unknowns] Unknown fields preserved while decoding when enabled
+                 */
+                const MatchmakingFound = function (properties) {
+                    this.match_params = {};
+                    if (properties)
+                        for (let keys = $Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                this[keys[i]] = properties[keys[i]];
+                };
+
+                /**
+                 * MatchmakingFound lobby_id.
+                 * @member {string} lobby_id
+                 * @memberof gamend.realtime.v1.MatchmakingFound
+                 * @instance
+                 */
+                MatchmakingFound.prototype.lobby_id = "";
+
+                /**
+                 * MatchmakingFound match_params.
+                 * @member {Object.<string,string>} match_params
+                 * @memberof gamend.realtime.v1.MatchmakingFound
+                 * @instance
+                 */
+                MatchmakingFound.prototype.match_params = $util.emptyObject;
+
+                /**
+                 * Encodes the specified MatchmakingFound message. Does not implicitly {@link gamend.realtime.v1.MatchmakingFound.verify|verify} messages.
+                 * @function encode
+                 * @memberof gamend.realtime.v1.MatchmakingFound
+                 * @static
+                 * @param {gamend.realtime.v1.MatchmakingFound.$Properties} message MatchmakingFound message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                MatchmakingFound.encode = function (message, writer, _depth) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (_depth === $undefined)
+                        _depth = 0;
+                    if (_depth > $util.recursionLimit)
+                        throw $Error("max depth exceeded");
+                    if (message.lobby_id != null && $Object.hasOwnProperty.call(message, "lobby_id") && message.lobby_id !== "")
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.lobby_id);
+                    if (message.match_params != null && $Object.hasOwnProperty.call(message, "match_params"))
+                        for (let keys = $Object.keys(message.match_params), i = 0; i < keys.length; ++i)
+                            writer.uint32(/* id 2, wireType 2 =*/18).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]).uint32(/* id 2, wireType 2 =*/18).string(message.match_params[keys[i]]).ldelim();
+                    if (message.$unknowns != null && $Object.hasOwnProperty.call(message, "$unknowns"))
+                        for (let i = 0; i < message.$unknowns.length; ++i)
+                            writer.raw(message.$unknowns[i]);
+                    return writer;
+                };
+
+                /**
+                 * Decodes a MatchmakingFound message from the specified reader or buffer.
+                 * @function decode
+                 * @memberof gamend.realtime.v1.MatchmakingFound
+                 * @static
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {gamend.realtime.v1.MatchmakingFound & gamend.realtime.v1.MatchmakingFound.$Shape} MatchmakingFound
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                MatchmakingFound.decode = function (reader, length, _end, _depth, _target) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    if (_depth === $undefined)
+                        _depth = 0;
+                    if (_depth > $Reader.recursionLimit)
+                        throw $Error("max depth exceeded");
+                    let end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.gamend.realtime.v1.MatchmakingFound(), key, value;
+                    while (reader.pos < end) {
+                        let start = reader.pos;
+                        let tag = reader.tag();
+                        if (tag === _end) {
+                            _end = $undefined;
+                            break;
+                        }
+                        let wireType = tag & 7;
+                        switch (tag >>>= 3) {
+                        case 1: {
+                                if (wireType !== 2)
+                                    break;
+                                if ((value = reader.stringVerify()).length)
+                                    message.lobby_id = value;
+                                else
+                                    delete message.lobby_id;
+                                continue;
+                            }
+                        case 2: {
+                                if (wireType !== 2)
+                                    break;
+                                if (message.match_params === $util.emptyObject)
+                                    message.match_params = {};
+                                let end2 = reader.uint32() + reader.pos;
+                                key = "";
+                                value = "";
+                                while (reader.pos < end2) {
+                                    let tag2 = reader.tag();
+                                    wireType = tag2 & 7;
+                                    switch (tag2 >>>= 3) {
+                                    case 1:
+                                        if (wireType !== 2)
+                                            break;
+                                        key = reader.stringVerify();
+                                        continue;
+                                    case 2:
+                                        if (wireType !== 2)
+                                            break;
+                                        value = reader.stringVerify();
+                                        continue;
+                                    }
+                                    reader.skipType(wireType, _depth, tag2);
+                                }
+                                if (key === "__proto__")
+                                    $util.makeProp(message.match_params, key);
+                                message.match_params[key] = value;
+                                continue;
+                            }
+                        }
+                        reader.skipType(wireType, _depth, tag);
+                        if (!reader.discardUnknown) {
+                            $util.makeProp(message, "$unknowns", false);
+                            (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
+                        }
+                    }
+                    if (_end !== $undefined)
+                        throw $Error("missing end group");
+                    return message;
+                };
+
+                /**
+                 * Creates a MatchmakingFound message from a plain object. Also converts values to their respective internal types.
+                 * @function fromObject
+                 * @memberof gamend.realtime.v1.MatchmakingFound
+                 * @static
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {gamend.realtime.v1.MatchmakingFound} MatchmakingFound
+                 */
+                MatchmakingFound.fromObject = function (object, _depth) {
+                    if (object instanceof $root.gamend.realtime.v1.MatchmakingFound)
+                        return object;
+                    if (!$util.isObject(object))
+                        throw $TypeError(".gamend.realtime.v1.MatchmakingFound: object expected");
+                    if (_depth === $undefined)
+                        _depth = 0;
+                    if (_depth > $util.recursionLimit)
+                        throw $Error("max depth exceeded");
+                    let message = new $root.gamend.realtime.v1.MatchmakingFound();
+                    if (object.lobby_id != null)
+                        if (typeof object.lobby_id !== "string" || object.lobby_id.length)
+                            message.lobby_id = $String(object.lobby_id);
+                    if (object.match_params) {
+                        if (!$util.isObject(object.match_params))
+                            throw $TypeError(".gamend.realtime.v1.MatchmakingFound.match_params: object expected");
+                        message.match_params = {};
+                        for (let keys = $Object.keys(object.match_params), i = 0; i < keys.length; ++i) {
+                            if (keys[i] === "__proto__")
+                                $util.makeProp(message.match_params, keys[i]);
+                            message.match_params[keys[i]] = $String(object.match_params[keys[i]]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a plain object from a MatchmakingFound message. Also converts values to other types if specified.
+                 * @function toObject
+                 * @memberof gamend.realtime.v1.MatchmakingFound
+                 * @static
+                 * @param {gamend.realtime.v1.MatchmakingFound} message MatchmakingFound
+                 * @param {$protobuf.IConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                MatchmakingFound.toObject = function (message, options, _depth) {
+                    if (!options)
+                        options = {};
+                    if (_depth === $undefined)
+                        _depth = 0;
+                    if (_depth > $util.recursionLimit)
+                        throw $Error("max depth exceeded");
+                    let object = {};
+                    if (options.objects || options.defaults)
+                        object.match_params = {};
+                    if (options.defaults)
+                        object.lobby_id = "";
+                    if (message.lobby_id != null && $Object.hasOwnProperty.call(message, "lobby_id"))
+                        object.lobby_id = message.lobby_id;
+                    let keys2;
+                    if (message.match_params && (keys2 = $Object.keys(message.match_params)).length) {
+                        object.match_params = {};
+                        for (let j = 0; j < keys2.length; ++j) {
+                            if (keys2[j] === "__proto__")
+                                $util.makeProp(object.match_params, keys2[j]);
+                            object.match_params[keys2[j]] = message.match_params[keys2[j]];
+                        }
+                    }
+                    return object;
+                };
+
+                /**
+                 * Converts this MatchmakingFound to JSON.
+                 * @function toJSON
+                 * @memberof gamend.realtime.v1.MatchmakingFound
+                 * @instance
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                MatchmakingFound.prototype.toJSON = function() {
+                    return MatchmakingFound.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                /**
+                 * Gets the type url for MatchmakingFound
+                 * @function getTypeUrl
+                 * @memberof gamend.realtime.v1.MatchmakingFound
+                 * @static
+                 * @param {string} [prefix] Custom type url prefix, defaults to `"type.googleapis.com"`
+                 * @returns {string} The type url
+                 */
+                MatchmakingFound.getTypeUrl = function(prefix) {
+                    if (prefix === $undefined)
+                        prefix = "type.googleapis.com";
+                    return prefix + "/gamend.realtime.v1.MatchmakingFound";
+                };
+
+                return MatchmakingFound;
+            })();
+
             v1.KvEntry = (function() {
 
                 /**

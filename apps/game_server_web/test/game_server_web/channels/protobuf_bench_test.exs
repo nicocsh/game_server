@@ -79,6 +79,8 @@ defmodule GameServerWeb.ProtobufBenchTest do
          chat_ref_id: uuid.(7),
          inserted_at: ts
        }},
+      {"user:x", "matchmaking_found",
+       %{lobby_id: uuid.(11), match_params: %{"mode" => "ranked", "band" => "2"}}},
       {"user:x", "kv_updated",
        %{key: "loadout", user_id: uuid.(8), lobby_id: nil, data: %{"weapon" => 12}, metadata: %{}}},
       {"lobby:x", "updated",

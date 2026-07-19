@@ -17,6 +17,7 @@ defmodule GameServerWeb.AdminPagesRenderTest do
   @admin_routes [
     {"/admin", "Admin"},
     {"/admin/config", "Config"},
+    {"/admin/runtime", "Runtime"},
     {"/admin/kv", "KV"},
     {"/admin/lobbies", "Lobbies"},
     {"/admin/leaderboards", "Leaderboards"},

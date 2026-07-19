@@ -300,6 +300,52 @@ defmodule Gamend.Realtime.V1.TournamentEvent do
   field :state, 3, type: :string
 end
 
+defmodule Gamend.Realtime.V1.TournamentMatchEvent do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "gamend.realtime.v1.TournamentMatchEvent",
+    protoc_gen_elixir_version: "0.17.0",
+    syntax: :proto3
+
+  field :tournament_id, 1, type: :string, json_name: "tournamentId"
+  field :slug, 2, type: :string
+  field :match_id, 3, type: :string, json_name: "matchId"
+  field :round, 4, type: :int32
+  field :deadline_ms, 5, type: :int64, json_name: "deadlineMs"
+  field :winner_entry_id, 6, type: :string, json_name: "winnerEntryId"
+end
+
+defmodule Gamend.Realtime.V1.MatchmakingFound.MatchParamsEntry do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "gamend.realtime.v1.MatchmakingFound.MatchParamsEntry",
+    map: true,
+    protoc_gen_elixir_version: "0.17.0",
+    syntax: :proto3
+
+  field :key, 1, type: :string
+  field :value, 2, type: :string
+end
+
+defmodule Gamend.Realtime.V1.MatchmakingFound do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "gamend.realtime.v1.MatchmakingFound",
+    protoc_gen_elixir_version: "0.17.0",
+    syntax: :proto3
+
+  field :lobby_id, 1, type: :string, json_name: "lobbyId"
+
+  field :match_params, 2,
+    repeated: true,
+    type: Gamend.Realtime.V1.MatchmakingFound.MatchParamsEntry,
+    json_name: "matchParams",
+    map: true
+end
+
 defmodule Gamend.Realtime.V1.KvEntry do
   @moduledoc false
 

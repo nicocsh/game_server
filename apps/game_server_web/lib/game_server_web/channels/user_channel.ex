@@ -316,6 +316,13 @@ defmodule GameServerWeb.UserChannel do
   # ── Matchmaking events ──────────────────────────────────────────────────────
 
   @impl true
+  # Game-defined events from GameServer.Realtime.push_to_user/3. The name is
+  # validated at the push site against the plugin's realtime_events/0.
+  def handle_info({:plugin_event, event, payload}, socket) do
+    push_event(socket, event, payload)
+    {:noreply, socket}
+  end
+
   def handle_info({:matchmaking_event, event, payload}, socket) do
     push_event(socket, event, payload)
     {:noreply, socket}

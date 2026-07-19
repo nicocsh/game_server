@@ -113,7 +113,28 @@ defmodule GameServerWeb.EventCodec do
          state: get(p, :state) || ""
        }
 
+  defp message_for("user", event, p)
+       when event in ~w(tournament_match_ready tournament_match_resolved),
+       do: %PB.TournamentMatchEvent{
+         tournament_id: get(p, :tournament_id),
+         slug: get(p, :slug) || "",
+         match_id: get(p, :match_id),
+         round: get(p, :round),
+         deadline_ms: ms(p, :deadline),
+         winner_entry_id: get(p, :winner_entry_id) || ""
+       }
+
+  defp message_for("user", "matchmaking_found", p),
+    do: %PB.MatchmakingFound{
+      lobby_id: get(p, :lobby_id),
+      match_params: stringify_map(get(p, :match_params) || %{})
+    }
+
   defp message_for(_kind, _event, _payload), do: nil
+
+  defp stringify_map(map) when is_map(map) do
+    Map.new(map, fn {k, v} -> {to_string(k), to_string(v)} end)
+  end
 
   # ── Message builders (absent map keys stay unset) ──────────────────────
 

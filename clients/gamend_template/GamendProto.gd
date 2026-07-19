@@ -107,6 +107,19 @@ static func decode_event(topic: String, event: String, data: PackedByteArray) ->
 					return _decode(PB.GroupInviteEvent.new(), data, func(m): return {"group_id": m.get_group_id()})
 				"party_invite_accepted", "party_invite_declined", "party_invite_cancelled":
 					return _decode(PB.PartyInviteEvent.new(), data, func(m): return {"party_id": m.get_party_id(), "user_id": m.get_user_id()})
+				"tournament_updated", "tournament_finished":
+					return _decode(PB.TournamentEvent.new(), data, func(m): return {"tournament_id": m.get_tournament_id(), "slug": m.get_slug(), "state": m.get_state()})
+				"tournament_match_ready", "tournament_match_resolved":
+					return _decode(PB.TournamentMatchEvent.new(), data, func(m): return {
+						"tournament_id": m.get_tournament_id(),
+						"slug": m.get_slug(),
+						"match_id": m.get_match_id(),
+						"round": m.get_round(),
+						"deadline_ms": m.get_deadline_ms(),
+						"winner_entry_id": m.get_winner_entry_id(),
+					})
+				"matchmaking_found":
+					return _decode(PB.MatchmakingFound.new(), data, func(m): return {"lobby_id": m.get_lobby_id(), "match_params": m.get_match_params()})
 		"lobby":
 			match event:
 				"updated":

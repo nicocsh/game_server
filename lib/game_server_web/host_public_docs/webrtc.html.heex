@@ -240,6 +240,30 @@ var reply = MyGamePb.HelloProtoReply.new()
 reply.from_bytes(result.data)</pre>
       </div>
 
+      <h4 class="font-semibold text-sm mt-3">{doc_text("Regenerating client bindings")}</h4>
+      <p class="text-sm text-base-content/80">
+        {doc_text(
+          "Whenever a proto file changes — the built-in realtime schema on upgrade, or your own game schema — regenerate the bindings and ship them with the game. One mix task drives all three generators, and the server is compiled from the same file, so everything stays in lock-step:"
+        )}
+      </p>
+      <div
+        class="bg-base-200 font-mono text-xs sm:text-sm p-4 rounded-lg overflow-auto"
+        phx-no-curly-interpolation
+      >
+        <pre>
+<span class="code-comment"># One task, every target — ships with game_server_core,</span>
+<span class="code-comment"># so downstream games can run it too.</span>
+mix host.proto.gen                    <span class="code-comment"># every .proto it discovers</span>
+mix host.proto.gen my_game.proto      <span class="code-comment"># just this one</span>
+
+<span class="code-comment"># Restrict targets, or override an output path:</span>
+mix host.proto.gen --only elixir,js my_game.proto
+mix host.proto.gen --godot-out godot/my_game_pb.gd my_game.proto
+
+<span class="code-comment"># Elixir needs protoc + protoc-gen-elixir; JS needs npx; Godot needs</span>
+<span class="code-comment"># GODOT_BIN and GODOBUF_DIR. Missing toolchains are skipped, not fatal.</span></pre>
+      </div>
+
       <h3 class="font-semibold mt-3">{doc_text("Signaling events")}</h3>
       <div class="overflow-x-auto">
         <table class="table table-sm">

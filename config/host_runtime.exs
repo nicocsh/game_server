@@ -38,50 +38,12 @@ end
 # Override any limit defined in GameServer.Limits by setting the corresponding
 # LIMIT_<KEY> environment variable, e.g. LIMIT_MAX_METADATA_SIZE=32768.
 # Unset variables keep the compiled defaults.
+# Derived from the defaults map rather than a hand-maintained list: a limit
+# added to GameServer.Limits is env-settable from day one. (A hand list here
+# once silently missed four keys.)
 _limit_overrides =
-  [
-    :max_metadata_size,
-    :max_page_size,
-    :max_display_name,
-    :max_email,
-    :max_profile_url,
-    :max_device_id,
-    :max_group_title,
-    :max_group_description,
-    :max_group_members,
-    :max_groups_per_user,
-    :max_groups_created_per_user,
-    :max_group_pending_invites,
-    :max_lobby_title,
-    :max_lobby_users,
-    :max_lobby_password,
-    :max_party_size,
-    :max_party_pending_invites,
-    :max_chat_content,
-    :max_notification_title,
-    :max_notification_content,
-    :max_notifications_per_user,
-    :max_friends_per_user,
-    :max_pending_friend_requests,
-    :max_hook_args_size,
-    :max_hook_args_count,
-    :max_kv_key,
-    :max_kv_value_size,
-    :max_kv_entries_per_user,
-    :max_leaderboard_title,
-    :max_leaderboard_description,
-    :max_leaderboard_slug,
-    :max_tournament_title,
-    :max_tournament_description,
-    :max_tournament_slug,
-    :max_tournament_entries,
-    :max_tournament_bracket_size,
-    :max_matchmaking_players,
-    :max_matchmaking_params_size,
-    :matchmaking_timeout_ms,
-    :matchmaking_tick_ms,
-    :matchmaking_offline_grace_ms
-  ]
+  GameServer.Limits.defaults()
+  |> Map.keys()
   |> Enum.reduce([], fn key, acc ->
     env_name = "LIMIT_#{key |> Atom.to_string() |> String.upcase()}"
 

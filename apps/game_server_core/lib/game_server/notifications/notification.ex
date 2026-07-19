@@ -15,6 +15,7 @@ defmodule GameServer.Notifications.Notification do
   import Ecto.Changeset
 
   alias GameServer.Accounts.User
+  alias GameServer.Notifications.Types
 
   @derive {Jason.Encoder,
            only: [
@@ -63,5 +64,23 @@ defmodule GameServer.Notifications.Notification do
       name: :notifications_sender_id_recipient_id_title_index
     )
     |> GameServer.Limits.validate_metadata_size(:metadata)
+    |> validate_notification_type()
+  end
+
+  # A notification's type is a client contract: the server never reads it, so
+  # an unregistered code would be delivered and silently ignored by every
+  # client. Reject it at write time instead. See GameServer.Notifications.Types.
+  defp validate_notification_type(changeset) do
+    case get_field(changeset, :metadata) do
+      %{"type" => type} ->
+        if Types.known?(type) do
+          changeset
+        else
+          add_error(changeset, :metadata, "unknown notification type #{inspect(type)}")
+        end
+
+      _ ->
+        changeset
+    end
   end
 end

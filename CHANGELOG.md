@@ -13,9 +13,14 @@
 - [fixed] Parties with a blocked pair refused at queue.
 - [fixed] Lobby-scoped KV cleared on leave.
 - [fixed] Default hooks shadowing plugin hooks.
+- [added] **Admin runtime page**: hooks, env vars, protobuf, channels, events, ER diagram, plugins, jobs.
 - [added] Player search on public pages.
 - [added] Realtime update debounce (REALTIME_DEBOUNCE_MS).
 - [added] Protobuf realtime format (opt-in).
+- [added] `mix host.proto.gen` for Elixir/JS/Godot bindings.
+- [added] **Plugin declarations**: `notification_types/0`, `realtime_events/0`, `env_vars/0`.
+- [added] `GameServer.Realtime.push_to_user/3` for game-defined events.
+- [added] `GameServer.Config.get/1,2` — typed env var reads, type from the default.
 - [changed] Realtime state events send full payloads.
 - [removed] JSON delta encoding.
 - [removed] Dead modules and client delta code.

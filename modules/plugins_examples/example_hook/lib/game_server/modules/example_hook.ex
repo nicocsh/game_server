@@ -252,6 +252,56 @@ defmodule GameServer.Modules.ExampleHook do
   def on_custom_hook(_hook, _args), do: {:error, :not_implemented}
 
   @doc """
+  Notification codes this plugin sends. Core rejects any notification whose
+  metadata "type" is not declared here or by core, so a client never receives
+  a code nobody documented.
+  """
+  def notification_types do
+    %{
+      "example_quest_completed" => "The player finished an example quest",
+      "example_rival_online" => "A rival the player follows came online"
+    }
+  end
+
+  @doc """
+  Realtime events this plugin pushes with `GameServer.Realtime.push_to_user/3`.
+  They ride the player's existing user:<id> channel, so the client needs no new
+  subscription — it just listens for these names.
+  """
+  def realtime_events do
+    %{
+      "example_quest_progress" => "An objective counter moved",
+      "example_boss_spawned" => "A world boss spawned near the player"
+    }
+  end
+
+  @doc """
+  Environment variables this plugin reads. Declaration only — it makes them
+  visible on the admin runtime page next to the server's own.
+  """
+  def env_vars do
+    [
+      %{
+        name: "EXAMPLE_HOOK_DIFFICULTY",
+        default: "normal",
+        description: "Difficulty band the example quests use"
+      },
+      # The type is inferred from the default, so Config.get/1 returns an
+      # integer here and a boolean below — no :type key needed.
+      %{
+        name: "EXAMPLE_HOOK_MAX_BOTS",
+        default: 8,
+        description: "Bots added to a match when it is short-handed"
+      },
+      %{
+        name: "EXAMPLE_HOOK_TUTORIAL",
+        default: true,
+        description: "Show the tutorial to new players"
+      }
+    ]
+  end
+
+  @doc """
   KV data schema example: entries under the "pb_loadout" key are pushed as
   compact binary (KvEntry data_pb) on protobuf sockets. Exact keys or
   "prefix*" patterns are supported.

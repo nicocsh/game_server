@@ -56,6 +56,9 @@ defmodule GameServer.Repo.AdvisoryLock do
   # Reserve 0..99 for atom namespaces; string hashes start at 100.
   @string_ns_offset 100
 
+  @doc "The registered lock namespaces and their ids (for introspection)."
+  def namespaces, do: @namespaces
+
   @doc """
   Acquire a transaction-scoped advisory lock for the given resource.
 

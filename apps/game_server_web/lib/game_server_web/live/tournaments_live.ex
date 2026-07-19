@@ -32,6 +32,8 @@ defmodule GameServerWeb.TournamentsLive do
      |> assign(:brackets_page_size, @brackets_page_size)
      |> assign(:players_page, 1)
      |> assign(:search, "")
+     |> assign(:state_filter, "all")
+     |> assign(:state_filter, "all")
      |> assign(:tournament, nil)
      |> assign(:bracket, nil)
      |> assign(:own?, false)
@@ -97,6 +99,11 @@ defmodule GameServerWeb.TournamentsLive do
 
   def handle_event("search", %{"search" => term}, socket) do
     {:noreply, socket |> assign(:search, term) |> assign(:players_page, 1) |> load_players()}
+  end
+
+  def handle_event("filter_state", %{"state" => state}, socket) do
+    {:noreply,
+     socket |> assign(:state_filter, state) |> assign(:players_page, 1) |> load_players()}
   end
 
   # Registration is server-authoritative: the button only offers the action, and
@@ -254,16 +261,19 @@ defmodule GameServerWeb.TournamentsLive do
     tournament = socket.assigns.tournament
     search = socket.assigns.search
 
+    state = state_filter(socket.assigns.state_filter)
+
     entries =
       Tournaments.list_entries(tournament.id,
         page: socket.assigns.players_page,
         page_size: @page_size,
         preload_leader: true,
         order: :bracket,
-        search: search
+        search: search,
+        state: state
       )
 
-    total = Tournaments.count_entries(tournament.id, search: search)
+    total = Tournaments.count_entries(tournament.id, search: search, state: state)
 
     socket
     |> assign(:entries, entries)
@@ -584,15 +594,37 @@ defmodule GameServerWeb.TournamentsLive do
             <span class="text-base-content/50 font-normal text-base">({@players_count})</span>
           </h2>
 
-          <form phx-change="search" phx-submit="search" id="players-search-form" class="sm:w-64">
-            <.input
-              name="search"
-              value={@search}
-              placeholder={gettext("Search players...")}
-              phx-debounce="300"
-              type="text"
-            />
-          </form>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <form phx-change="filter_state" id="players-state-form">
+              <select name="state" class="select select-bordered w-full sm:w-44">
+                <option value="all" selected={@state_filter == "all"}>
+                  {gettext("All results")}
+                </option>
+                <option :if={@drawn?} value="winner" selected={@state_filter == "winner"}>
+                  {gettext("Champion")}
+                </option>
+                <option :if={@drawn?} value="active" selected={@state_filter == "active"}>
+                  {gettext("Playing")}
+                </option>
+                <option :if={@drawn?} value="eliminated" selected={@state_filter == "eliminated"}>
+                  {gettext("Eliminated")}
+                </option>
+                <option value="registered" selected={@state_filter == "registered"}>
+                  {gettext("Registered")}
+                </option>
+              </select>
+            </form>
+
+            <form phx-change="search" phx-submit="search" id="players-search-form" class="sm:w-64">
+              <.input
+                name="search"
+                value={@search}
+                placeholder={gettext("Search players...")}
+                phx-debounce="300"
+                type="text"
+              />
+            </form>
+          </div>
         </div>
 
         <div class="overflow-x-auto">
@@ -649,7 +681,7 @@ defmodule GameServerWeb.TournamentsLive do
 
         <div :if={@entries == []} class="text-center py-8 text-base-content/60">
           <p :if={@search == ""}>{gettext("No players registered yet.")}</p>
-          <p :if={@search != ""}>{gettext("No results.")}</p>
+          <p :if={@search != "" or @state_filter != "all"}>{gettext("No results.")}</p>
         </div>
 
         <div :if={@players_pages > 1} class="mt-4 flex justify-center">
@@ -880,6 +912,9 @@ defmodule GameServerWeb.TournamentsLive do
   defp state_class("finished"), do: "badge-neutral"
   defp state_class("cancelled"), do: "badge-error"
   defp state_class(_state), do: "badge-ghost"
+
+  defp state_filter("all"), do: nil
+  defp state_filter(state), do: state
 
   defp entry_state_class("winner"), do: "badge-success"
   defp entry_state_class("active"), do: "badge-info"

@@ -588,6 +588,7 @@ defmodule GameServerWeb.Router.Shared do
           live "/admin/logs", AdminLive.Logs, :index
           live "/admin/geo", AdminLive.Geo, :index
           live "/admin/system", AdminLive.System, :index
+          live "/admin/runtime", AdminLive.Runtime, :index
         end
       end
     end

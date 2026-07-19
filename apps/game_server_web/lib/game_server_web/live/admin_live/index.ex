@@ -90,6 +90,9 @@ defmodule GameServerWeb.AdminLive.Index do
           <.link navigate={~p"/admin/system"} class="btn btn-outline">
             System
           </.link>
+          <.link navigate={~p"/admin/runtime"} class="btn btn-outline">
+            Runtime
+          </.link>
         </div>
 
         <div class="card bg-base-200">

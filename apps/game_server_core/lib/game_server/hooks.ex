@@ -491,6 +491,12 @@ defmodule GameServer.Hooks do
     |> Enum.uniq()
   end
 
+  @doc """
+  True when the hook transforms its input (a `before_*` pipeline hook) rather
+  than fanning out notifications. Exposed for the admin runtime page.
+  """
+  def pipeline_hook?(name, arity), do: lifecycle_pipeline_hook?(name, arity)
+
   defp lifecycle_pipeline_hook?(name, arity) when is_atom(name) and is_integer(arity) do
     # Pipeline-style hooks transform their inputs. These are the "before_*" hooks
     # used by domain flows.

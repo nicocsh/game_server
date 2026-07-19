@@ -221,6 +221,28 @@ message TournamentEvent {
   string state = 3;
 }
 
+// "tournament_match_ready" and "tournament_match_resolved" on user:<id>
+// channels, pushed to both entry leaders of the match.
+message TournamentMatchEvent {
+  string tournament_id = 1;
+  string slug = 2;
+  string match_id = 3;
+  int32 round = 4;
+  // Unix ms; 0 when the match has no deadline.
+  int64 deadline_ms = 5;
+  // Set only on "tournament_match_resolved".
+  string winner_entry_id = 6;
+}
+
+// ── Matchmaking ──────────────────────────────────────────────────────────
+
+// "matchmaking_found" on user:<id> channels: a match formed and the user is
+// already seated in the lobby.
+message MatchmakingFound {
+  string lobby_id = 1;
+  map<string, string> match_params = 2;
+}
+
 // ── Key/value store events ───────────────────────────────────────────────
 
 // "kv_updated" (with data) and "kv_deleted" (without). When the host

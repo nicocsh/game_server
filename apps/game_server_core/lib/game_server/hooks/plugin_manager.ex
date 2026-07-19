@@ -23,6 +23,7 @@ defmodule GameServer.Hooks.PluginManager do
 
   require Logger
 
+  alias GameServer.Hooks.Declarations
   alias GameServer.Hooks.DynamicRpcs
   alias GameServer.Hooks.HookSchemas
   alias GameServer.Hooks.KvSchemas
@@ -243,6 +244,7 @@ defmodule GameServer.Hooks.PluginManager do
     MetadataSchemas.refresh(list)
     HookSchemas.refresh(list)
     KvSchemas.refresh(list)
+    Declarations.refresh(list)
     state
   end
 

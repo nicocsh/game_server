@@ -31,6 +31,88 @@ import topbar from "../vendor/topbar"
 // Custom hooks
 const Hooks = {
   /**
+   * MermaidDiagram — renders the mermaid source in `data-diagram` into the
+   * element. The 2.7MB mermaid bundle is lazy-loaded on first use so it never
+   * weighs on normal pages (it is only used by /admin/runtime).
+   */
+  MermaidDiagram: {
+    mounted() { this.render() },
+    updated() { this.render() },
+    async render() {
+      if (!window.mermaid) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement("script")
+          s.src = "/assets/js/mermaid.js"
+          s.onload = resolve
+          s.onerror = reject
+          document.head.appendChild(s)
+        }).catch(() => null)
+      }
+      if (!window.mermaid) {
+        this.el.textContent = "mermaid failed to load"
+        return
+      }
+      const dark = document.documentElement.getAttribute("data-theme") === "dark"
+      window.mermaid.initialize({startOnLoad: false, theme: dark ? "dark" : "default"})
+      const src = this.el.dataset.diagram
+      try {
+        const {svg} = await window.mermaid.render(`mm-${this.el.id}`, src)
+        this.el.innerHTML = svg
+        this.enablePanZoom()
+      } catch (e) {
+        this.el.textContent = `diagram error: ${e.message || e}`
+      }
+    },
+    // Zoom/pan on top of mermaid's own responsive sizing. The SVG is left at
+    // width:100% so CSS fits it to the container — deriving a fit scale in JS
+    // needs viewport metrics that are not reliably available at mount time.
+    // scale 1 therefore means "fitted"; double-click returns to it.
+    enablePanZoom() {
+      const svg = this.el.querySelector("svg")
+      if (!svg) return
+      svg.style.width = "100%"
+      svg.style.height = "auto"
+      svg.style.maxWidth = "100%"
+      let scale = 1, tx = 0, ty = 0
+      const apply = () => {
+        svg.style.transformOrigin = "0 0"
+        svg.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`
+      }
+      this.el.addEventListener("wheel", (e) => {
+        e.preventDefault()
+        const rect = this.el.getBoundingClientRect()
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top
+        const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
+        const next = Math.min(Math.max(scale * factor, 0.05), 12)
+        // keep the point under the cursor fixed while zooming
+        tx = mx - (mx - tx) * (next / scale)
+        ty = my - (my - ty) * (next / scale)
+        scale = next
+        apply()
+      }, {passive: false})
+      let dragging = null
+      this.el.addEventListener("pointerdown", (e) => {
+        dragging = {x: e.clientX - tx, y: e.clientY - ty}
+        this.el.style.cursor = "grabbing"
+        this.el.setPointerCapture(e.pointerId)
+      })
+      this.el.addEventListener("pointermove", (e) => {
+        if (!dragging) return
+        tx = e.clientX - dragging.x
+        ty = e.clientY - dragging.y
+        apply()
+      })
+      this.el.addEventListener("pointerup", () => {
+        dragging = null
+        this.el.style.cursor = "grab"
+      })
+      this.el.addEventListener("dblclick", () => {
+        scale = 1; tx = 0; ty = 0
+        apply()
+      })
+    },
+  },
+  /**
    * SiteBanner — dismissible site-wide announcement banner.
    *
    * Reads `data-message-hash` to identify the current message. Dismissed hashes

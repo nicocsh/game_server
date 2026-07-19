@@ -129,6 +129,7 @@ config :esbuild,
     args: [
       "js/app.js",
       "js/theme-init.js",
+      "js/mermaid.js",
       "--bundle",
       "--target=es2022",
       "--outdir=#{host_assets_output_root}",

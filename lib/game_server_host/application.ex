@@ -219,21 +219,9 @@ defmodule GameServerHost.Application do
   end
 
   defp channels_info do
-    {:ok, modules} = :application.get_key(:game_server_web, :modules)
+    channels = GameServerWeb.UserSocket.__channels__()
 
-    channel_mods =
-      modules
-      |> Enum.filter(fn m ->
-        case Atom.to_string(m) do
-          "Elixir." <> rest ->
-            String.ends_with?(rest, "Channel") and String.starts_with?(rest, "GameServerWeb.")
-
-          _ ->
-            false
-        end
-      end)
-
-    "Channels: #{length(channel_mods)} (#{Enum.map_join(channel_mods, ", ", &inspect/1)})"
+    "Channels: #{length(channels)} (#{Enum.map_join(channels, ", ", fn {pattern, _mod, _desc} -> pattern end)})"
   end
 
   defp endpoint_info do

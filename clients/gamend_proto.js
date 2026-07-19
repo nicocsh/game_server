@@ -122,6 +122,20 @@ const decoders = {
     party_invite_accepted: (bin) => PB.PartyInviteEvent.toObject(PB.PartyInviteEvent.decode(bin)),
     party_invite_declined: (bin) => PB.PartyInviteEvent.toObject(PB.PartyInviteEvent.decode(bin)),
     party_invite_cancelled: (bin) => PB.PartyInviteEvent.toObject(PB.PartyInviteEvent.decode(bin)),
+    tournament_updated: (bin) => PB.TournamentEvent.toObject(PB.TournamentEvent.decode(bin)),
+    tournament_finished: (bin) => PB.TournamentEvent.toObject(PB.TournamentEvent.decode(bin)),
+    tournament_match_ready: (bin) =>
+      PB.TournamentMatchEvent.toObject(PB.TournamentMatchEvent.decode(bin), {
+        defaults: true,
+        longs: Number,
+      }),
+    tournament_match_resolved: (bin) =>
+      PB.TournamentMatchEvent.toObject(PB.TournamentMatchEvent.decode(bin), {
+        defaults: true,
+        longs: Number,
+      }),
+    matchmaking_found: (bin) =>
+      PB.MatchmakingFound.toObject(PB.MatchmakingFound.decode(bin), { defaults: true }),
   },
   lobby: {
     updated: (bin) => decodeLobby(bin),

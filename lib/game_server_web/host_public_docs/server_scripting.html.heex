@@ -150,6 +150,46 @@ end</code></pre>
       </div>
 
       <div class="step">
+        <h4 class="font-semibold">{doc_text("Declaring what your plugin contributes")}</h4>
+        <div class="ml-6 mt-2 space-y-2">
+          <p>
+            {doc_text(
+              "Three optional callbacks tell the server what your game adds, so it shows up in the admin Runtime page next to the built-in surface instead of being invisible. Notification codes are enforced: the server never reads a notification's type, so an undeclared code would be delivered and silently ignored by every client — it is rejected at write time instead. Realtime events are enforced at the push site for the same reason. Env vars are declaration only, since a plugin can always read one directly."
+            )}
+          </p>
+          <div class="bg-base-300 p-4 rounded-lg font-mono text-sm">
+            <pre><code class="language-elixir" phx-no-curly-interpolation>def notification_types do
+  %{"quest_completed" => "Player finished a quest"}
+end
+
+def realtime_events do
+  %{"quest_progress" => "An objective counter moved"}
+end
+
+def env_vars do
+  [%{name: "MYGAME_DIFFICULTY", default: "normal", description: "Global difficulty"},
+   %{name: "MYGAME_MAX_BOTS", default: 8, description: "Bots per match"},
+   %{name: "MYGAME_TUTORIAL", default: true, description: "Show the tutorial"}]
+end
+
+<span class="code-comment"># The type comes from the default, so reads are already coerced —</span>
+<span class="code-comment"># no String.to_integer/1 or == "true" at each call site.</span>
+GameServer.Config.get("MYGAME_MAX_BOTS")   <span class="code-comment"># 8 (integer)</span>
+GameServer.Config.get("MYGAME_TUTORIAL")   <span class="code-comment"># true (boolean)</span>
+
+<span class="code-comment"># Pushing a declared event to one player — rides the existing</span>
+<span class="code-comment"># user:&lt;id&gt; channel, so the client needs no new subscription.</span>
+GameServer.Realtime.push_to_user(user.id, "quest_progress", %{id: 7, step: 2})</code></pre>
+          </div>
+          <p class="text-sm text-base-content/80">
+            {doc_text(
+              "Codes and event names are global: if two plugins declare the same one, the first in name order wins and the loser is logged. See example_hook for a working set."
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
         <h4 class="font-semibold">{doc_text("Reacting to achievement unlocks")}</h4>
         <div class="ml-6 mt-2 space-y-2">
           <p>

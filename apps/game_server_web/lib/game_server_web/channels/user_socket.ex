@@ -10,35 +10,28 @@ defmodule GameServerWeb.UserSocket do
   # assign values that can be accessed by your channel topics.
 
   ## Channels
-  # Register the user channel for per-user realtime events
-  channel "user:*", GameServerWeb.UserChannel
-
-  # Lobby channels - join workspace level lobby topics (members only)
-  channel "lobby:*", GameServerWeb.LobbyChannel
-
-  # Global lobbies channel for list updates and membership-change notifications
-  channel "lobbies", GameServerWeb.LobbiesChannel
-
-  # Group channels - per-group events for members
-  channel "group:*", GameServerWeb.GroupChannel
-
-  # Global groups channel for list updates (new/updated/deleted groups)
-  channel "groups", GameServerWeb.GroupsChannel
-
-  # Party channels - per-party events for members
-  channel "party:*", GameServerWeb.PartyChannel
-
-  # Uncomment the following line to define a "room:*" topic
-  # pointing to the `GameServerWeb.RoomChannel`:
   #
-  # channel "room:*", GameServerWeb.RoomChannel
-  #
-  # To create a channel file, use the mix task:
-  #
-  #     mix phx.gen.channel Room
-  #
-  # See the [`Channels guide`](https://hexdocs.pm/phoenix/channels.html)
-  # for further details.
+  # Declared as data so the list is enumerable (Phoenix's `channel` macro only
+  # generates a `__channel__/1` dispatch head). The startup banner and the
+  # admin runtime page read `__channels__/0`.
+  @channels [
+    {"user:*", GameServerWeb.UserChannel,
+     "Per-user events: profile, notifications, invites, KV, matchmaking, tournaments"},
+    {"lobby:*", GameServerWeb.LobbyChannel,
+     "One lobby: state, membership, chat, WebRTC signalling"},
+    {"lobbies", GameServerWeb.LobbiesChannel,
+     "Global lobby list: created/updated/deleted, membership counts"},
+    {"group:*", GameServerWeb.GroupChannel, "One group: state, members, join requests, chat"},
+    {"groups", GameServerWeb.GroupsChannel, "Global group list: created/updated/deleted"},
+    {"party:*", GameServerWeb.PartyChannel, "One party: state, members, chat, disband"}
+  ]
+
+  for {pattern, module, _description} <- @channels do
+    channel(pattern, module)
+  end
+
+  @doc "All channel routes as `{topic_pattern, module, description}`."
+  def __channels__, do: @channels
 
   # Socket params are passed from the client and can
   # be used to verify and authenticate a user. After

@@ -873,6 +873,11 @@ class User:
 		service.field = __metadata_pb
 		data[__metadata_pb.tag] = service
 		
+		__username = PBField.new("username", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 13, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __username
+		data[__username.tag] = service
+		
 	var data = {}
 	
 	var __id: PBField
@@ -1007,6 +1012,17 @@ class User:
 		__metadata_pb.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BYTES]
 	func set_metadata_pb(value : PackedByteArray) -> void:
 		__metadata_pb.value = value
+	
+	var __username: PBField
+	func has_username() -> bool:
+		return data[13].state == PB_SERVICE_STATE.FILLED
+	func get_username() -> String:
+		return __username.value
+	func clear_username() -> void:
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__username.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_username(value : String) -> void:
+		__username.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
@@ -1199,6 +1215,11 @@ class UserBrief:
 		service.field = __metadata_pb
 		data[__metadata_pb.tag] = service
 		
+		__username = PBField.new("username", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 9, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __username
+		data[__username.tag] = service
+		
 	var data = {}
 	
 	var __id: PBField
@@ -1288,6 +1309,17 @@ class UserBrief:
 		__metadata_pb.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BYTES]
 	func set_metadata_pb(value : PackedByteArray) -> void:
 		__metadata_pb.value = value
+	
+	var __username: PBField
+	func has_username() -> bool:
+		return data[9].state == PB_SERVICE_STATE.FILLED
+	func get_username() -> String:
+		return __username.value
+	func clear_username() -> void:
+		data[9].state = PB_SERVICE_STATE.UNFILLED
+		__username.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_username(value : String) -> void:
+		__username.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
@@ -2561,6 +2593,11 @@ class MemberEvent:
 		service.field = __metadata_pb
 		data[__metadata_pb.tag] = service
 		
+		__username = PBField.new("username", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 11, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __username
+		data[__username.tag] = service
+		
 	var data = {}
 	
 	var __user_id: PBField
@@ -2672,6 +2709,17 @@ class MemberEvent:
 		__metadata_pb.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BYTES]
 	func set_metadata_pb(value : PackedByteArray) -> void:
 		__metadata_pb.value = value
+	
+	var __username: PBField
+	func has_username() -> bool:
+		return data[11].state == PB_SERVICE_STATE.FILLED
+	func get_username() -> String:
+		return __username.value
+	func clear_username() -> void:
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__username.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_username(value : String) -> void:
+		__username.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
@@ -2925,6 +2973,345 @@ class PartyInviteEvent:
 	func set_user_id(value : String) -> void:
 		__user_id.value = value
 	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class TournamentEvent:
+	extends RefCounted
+	func _init():
+		var service
+		
+		__tournament_id = PBField.new("tournament_id", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __tournament_id
+		data[__tournament_id.tag] = service
+		
+		__slug = PBField.new("slug", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __slug
+		data[__slug.tag] = service
+		
+		__state = PBField.new("state", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __state
+		data[__state.tag] = service
+		
+	var data = {}
+	
+	var __tournament_id: PBField
+	func has_tournament_id() -> bool:
+		return data[1].state == PB_SERVICE_STATE.FILLED
+	func get_tournament_id() -> String:
+		return __tournament_id.value
+	func clear_tournament_id() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__tournament_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_tournament_id(value : String) -> void:
+		__tournament_id.value = value
+	
+	var __slug: PBField
+	func has_slug() -> bool:
+		return data[2].state == PB_SERVICE_STATE.FILLED
+	func get_slug() -> String:
+		return __slug.value
+	func clear_slug() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__slug.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_slug(value : String) -> void:
+		__slug.value = value
+	
+	var __state: PBField
+	func has_state() -> bool:
+		return data[3].state == PB_SERVICE_STATE.FILLED
+	func get_state() -> String:
+		return __state.value
+	func clear_state() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__state.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_state(value : String) -> void:
+		__state.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class TournamentMatchEvent:
+	extends RefCounted
+	func _init():
+		var service
+		
+		__tournament_id = PBField.new("tournament_id", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __tournament_id
+		data[__tournament_id.tag] = service
+		
+		__slug = PBField.new("slug", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __slug
+		data[__slug.tag] = service
+		
+		__match_id = PBField.new("match_id", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __match_id
+		data[__match_id.tag] = service
+		
+		__round = PBField.new("round", PB_DATA_TYPE.INT32, PB_RULE.OPTIONAL, 4, true, DEFAULT_VALUES_3[PB_DATA_TYPE.INT32])
+		service = PBServiceField.new()
+		service.field = __round
+		data[__round.tag] = service
+		
+		__deadline_ms = PBField.new("deadline_ms", PB_DATA_TYPE.INT64, PB_RULE.OPTIONAL, 5, true, DEFAULT_VALUES_3[PB_DATA_TYPE.INT64])
+		service = PBServiceField.new()
+		service.field = __deadline_ms
+		data[__deadline_ms.tag] = service
+		
+		__winner_entry_id = PBField.new("winner_entry_id", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 6, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __winner_entry_id
+		data[__winner_entry_id.tag] = service
+		
+	var data = {}
+	
+	var __tournament_id: PBField
+	func has_tournament_id() -> bool:
+		return data[1].state == PB_SERVICE_STATE.FILLED
+	func get_tournament_id() -> String:
+		return __tournament_id.value
+	func clear_tournament_id() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__tournament_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_tournament_id(value : String) -> void:
+		__tournament_id.value = value
+	
+	var __slug: PBField
+	func has_slug() -> bool:
+		return data[2].state == PB_SERVICE_STATE.FILLED
+	func get_slug() -> String:
+		return __slug.value
+	func clear_slug() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__slug.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_slug(value : String) -> void:
+		__slug.value = value
+	
+	var __match_id: PBField
+	func has_match_id() -> bool:
+		return data[3].state == PB_SERVICE_STATE.FILLED
+	func get_match_id() -> String:
+		return __match_id.value
+	func clear_match_id() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__match_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_match_id(value : String) -> void:
+		__match_id.value = value
+	
+	var __round: PBField
+	func has_round() -> bool:
+		return data[4].state == PB_SERVICE_STATE.FILLED
+	func get_round() -> int:
+		return __round.value
+	func clear_round() -> void:
+		data[4].state = PB_SERVICE_STATE.UNFILLED
+		__round.value = DEFAULT_VALUES_3[PB_DATA_TYPE.INT32]
+	func set_round(value : int) -> void:
+		__round.value = value
+	
+	var __deadline_ms: PBField
+	func has_deadline_ms() -> bool:
+		return data[5].state == PB_SERVICE_STATE.FILLED
+	func get_deadline_ms() -> int:
+		return __deadline_ms.value
+	func clear_deadline_ms() -> void:
+		data[5].state = PB_SERVICE_STATE.UNFILLED
+		__deadline_ms.value = DEFAULT_VALUES_3[PB_DATA_TYPE.INT64]
+	func set_deadline_ms(value : int) -> void:
+		__deadline_ms.value = value
+	
+	var __winner_entry_id: PBField
+	func has_winner_entry_id() -> bool:
+		return data[6].state == PB_SERVICE_STATE.FILLED
+	func get_winner_entry_id() -> String:
+		return __winner_entry_id.value
+	func clear_winner_entry_id() -> void:
+		data[6].state = PB_SERVICE_STATE.UNFILLED
+		__winner_entry_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_winner_entry_id(value : String) -> void:
+		__winner_entry_id.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class MatchmakingFound:
+	extends RefCounted
+	func _init():
+		var service
+		
+		__lobby_id = PBField.new("lobby_id", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __lobby_id
+		data[__lobby_id.tag] = service
+		
+		var __match_params_default: Array = []
+		__match_params = PBField.new("match_params", PB_DATA_TYPE.MAP, PB_RULE.REPEATED, 2, true, __match_params_default)
+		service = PBServiceField.new()
+		service.field = __match_params
+		service.func_ref = Callable(self, "add_empty_match_params")
+		data[__match_params.tag] = service
+		
+	var data = {}
+	
+	var __lobby_id: PBField
+	func has_lobby_id() -> bool:
+		return data[1].state == PB_SERVICE_STATE.FILLED
+	func get_lobby_id() -> String:
+		return __lobby_id.value
+	func clear_lobby_id() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__lobby_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_lobby_id(value : String) -> void:
+		__lobby_id.value = value
+	
+	var __match_params: PBField
+	func get_raw_match_params():
+		return __match_params.value
+	func get_match_params():
+		return PBPacker.construct_map(__match_params.value)
+	func clear_match_params():
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__match_params.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MAP]
+	func add_empty_match_params() -> MatchmakingFound.map_type_match_params:
+		var element = MatchmakingFound.map_type_match_params.new()
+		__match_params.value.append(element)
+		return element
+	func add_match_params(a_key, a_value) -> void:
+		var idx = -1
+		for i in range(__match_params.value.size()):
+			if __match_params.value[i].get_key() == a_key:
+				idx = i
+				break
+		var element = MatchmakingFound.map_type_match_params.new()
+		element.set_key(a_key)
+		element.set_value(a_value)
+		if idx != -1:
+			__match_params.value[idx] = element
+		else:
+			__match_params.value.append(element)
+	
+	class map_type_match_params:
+		extends RefCounted
+		func _init():
+			var service
+			
+			__key = PBField.new("key", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+			__key.is_map_field = true
+			service = PBServiceField.new()
+			service.field = __key
+			data[__key.tag] = service
+			
+			__value = PBField.new("value", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+			__value.is_map_field = true
+			service = PBServiceField.new()
+			service.field = __value
+			data[__value.tag] = service
+			
+		var data = {}
+		
+		var __key: PBField
+		func has_key() -> bool:
+			return data[1].state == PB_SERVICE_STATE.FILLED
+		func get_key() -> String:
+			return __key.value
+		func clear_key() -> void:
+			data[1].state = PB_SERVICE_STATE.UNFILLED
+			__key.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+		func set_key(value : String) -> void:
+			__key.value = value
+		
+		var __value: PBField
+		func has_value() -> bool:
+			return data[2].state == PB_SERVICE_STATE.FILLED
+		func get_value() -> String:
+			return __value.value
+		func clear_value() -> void:
+			data[2].state = PB_SERVICE_STATE.UNFILLED
+			__value.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+		func set_value(value : String) -> void:
+			__value.value = value
+		
+		func _to_string() -> String:
+			return PBPacker.message_to_string(data)
+			
+		func to_bytes() -> PackedByteArray:
+			return PBPacker.pack_message(data)
+			
+		func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+			var cur_limit = bytes.size()
+			if limit != -1:
+				cur_limit = limit
+			var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+			if result == cur_limit:
+				if PBPacker.check_required(data):
+					if limit == -1:
+						return PB_ERR.NO_ERRORS
+				else:
+					return PB_ERR.REQUIRED_FIELDS
+			elif limit == -1 && result > 0:
+				return PB_ERR.PARSE_INCOMPLETE
+			return result
+		
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
 		
