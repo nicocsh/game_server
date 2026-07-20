@@ -4,14 +4,30 @@ defmodule GameServerWeb.FileLogHandler do
   admin log buffer (`GameServerWeb.AdminLogBuffer`) is in-memory only and is
   lost on redeploy/restart.
 
-  Disabled unless `:game_server_web, :log_file` is set to a path (wired from
-  the `LOG_FILE_PATH` env in host runtime config). Runs *alongside* the default
+  Disabled unless a path is configured, either as `:game_server_web, :log_file`
+  or via the `LOG_FILE_PATH` environment variable. Runs *alongside* the default
   stdout handler, so `fly logs` still receives everything. On a Fly deploy,
   point it at the mounted volume, e.g.
   `LOG_FILE_PATH=/data/log/game_server.log`.
 
   Backed by OTP's built-in `:logger_std_h`, which handles size-based rotation
-  (`max_no_bytes` per file, `max_no_files` kept).
+  (`max_no_bytes` per file, `max_no_files` kept). Defaults to 10MB x 5 files.
+
+  ## Why the env is read here
+
+  This used to require each host to wire `LOG_FILE_PATH` into `:log_file` in its
+  own runtime config. A host loads its own runtime config and never core's, so
+  the block core shipped reached only the hosts that had copied it — and the two
+  that had not got no file logging at all while the env var looked set. Reading
+  the environment here means a host needs no config for this to work. Explicit
+  `:game_server_web` app config still wins, so a host can override.
+
+  | setting | app config | env |
+  | --- | --- | --- |
+  | path | `:log_file` | `LOG_FILE_PATH` |
+  | level | `:log_file_level` | `LOG_FILE_LEVEL` |
+  | bytes per file | `:log_file_max_bytes` | `LOG_FILE_MAX_BYTES` |
+  | files kept | `:log_file_max_files` | `LOG_FILE_MAX_FILES` |
   """
 
   require Logger
@@ -26,12 +42,18 @@ defmodule GameServerWeb.FileLogHandler do
   calling it again while already installed is a no-op.
   """
   def install do
-    with path when is_binary(path) and path != "" <-
-           Application.get_env(:game_server_web, :log_file),
+    with path when is_binary(path) and path != "" <- configured_path(),
          :undefined <- handler_status() do
       add_handler(path)
     else
       _ -> :ok
+    end
+  end
+
+  defp configured_path do
+    case Application.get_env(:game_server_web, :log_file) do
+      path when is_binary(path) and path != "" -> path
+      _ -> System.get_env("LOG_FILE_PATH")
     end
   end
 
@@ -49,8 +71,8 @@ defmodule GameServerWeb.FileLogHandler do
       level: log_level(),
       config: %{
         file: String.to_charlist(path),
-        max_no_bytes: env_int(:log_file_max_bytes, @default_max_no_bytes),
-        max_no_files: env_int(:log_file_max_files, @default_max_no_files),
+        max_no_bytes: env_int(:log_file_max_bytes, "LOG_FILE_MAX_BYTES", @default_max_no_bytes),
+        max_no_files: env_int(:log_file_max_files, "LOG_FILE_MAX_FILES", @default_max_no_files),
         filesync_repeat_interval: 5_000
       },
       formatter:
@@ -75,16 +97,42 @@ defmodule GameServerWeb.FileLogHandler do
   end
 
   defp log_level do
-    case Application.get_env(:game_server_web, :log_file_level, :info) do
-      level when is_atom(level) -> level
+    case Application.get_env(:game_server_web, :log_file_level) do
+      level when is_atom(level) and not is_nil(level) -> level
+      _ -> env_level()
+    end
+  end
+
+  defp env_level do
+    # to_existing_atom so a typo cannot mint an atom; unknown values fall back
+    # rather than crashing the handler install.
+    with value when is_binary(value) <- System.get_env("LOG_FILE_LEVEL"),
+         {:ok, level} <- safe_level(value) do
+      level
+    else
       _ -> :info
     end
   end
 
-  defp env_int(key, default) do
-    case Application.get_env(:game_server_web, key, default) do
+  defp safe_level(value) do
+    {:ok, String.to_existing_atom(String.trim(value))}
+  rescue
+    ArgumentError -> :error
+  end
+
+  defp env_int(key, env, default) do
+    case Application.get_env(:game_server_web, key) do
       value when is_integer(value) and value > 0 -> value
+      _ -> parse_int(System.get_env(env), default)
+    end
+  end
+
+  defp parse_int(value, default) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {parsed, _rest} when parsed > 0 -> parsed
       _ -> default
     end
   end
+
+  defp parse_int(_value, default), do: default
 end

@@ -86,3 +86,7 @@ apps/game_server_core/deps/
 apps/game_server_web/_build/
 apps/game_server_web/deps/
 apps/game_server_web/priv/db/
+
+# Rotating log files (dev: log/dev.log, docker compose: logs/).
+/log/
+/logs/
