@@ -14,6 +14,7 @@ defmodule GameServerWeb.RuntimeIntrospection do
   """
 
   alias Crontab.CronExpression.Composer
+  alias Ecto.Adapters.SQL
   alias GameServer.Hooks.Declarations
   alias GameServer.Hooks.DynamicRpcs
   alias GameServer.Hooks.HookSchemas
@@ -227,23 +228,7 @@ defmodule GameServerWeb.RuntimeIntrospection do
 
         match = Regex.run(~r/^\s*#?\s*([A-Z][A-Z0-9_]+)=(.*)$/, line) ->
           [_, name, rest] = match
-
-          # A quoted value is taken whole; otherwise the first token is the value
-          # and the remainder a description.
-          {default, desc} =
-            case String.trim(rest) do
-              "\"" <> _ = quoted ->
-                {quoted, ""}
-
-              other ->
-                other
-                |> String.split(~r/[ \t]{2,}| /, parts: 2)
-                |> then(fn
-                  [value] -> {value, ""}
-                  [value, description] -> {value, String.trim(description)}
-                end)
-            end
-
+          {default, desc} = split_env_value(rest)
           {section, [{name, default, desc, section} | acc]}
 
         true ->
@@ -252,6 +237,21 @@ defmodule GameServerWeb.RuntimeIntrospection do
     end)
     |> elem(1)
     |> Enum.reverse()
+  end
+
+  # A quoted value is taken whole; otherwise the first token is the value and
+  # the remainder a description.
+  defp split_env_value(rest) do
+    case String.trim(rest) do
+      "\"" <> _ = quoted ->
+        {quoted, ""}
+
+      other ->
+        case String.split(other, ~r/[ \t]{2,}| /, parts: 2) do
+          [value] -> {value, ""}
+          [value, description] -> {value, String.trim(description)}
+        end
+    end
   end
 
   defp env_row({name, default, desc, section}), do: env_row({name, default, desc, section, nil})
@@ -499,7 +499,7 @@ defmodule GameServerWeb.RuntimeIntrospection do
 
     # AdvisoryLock.postgres?/0 rather than comparing __adapter__ directly: the
     # adapter is compile-time-known per build, so a literal comparison warns.
-    if GameServer.Repo.AdvisoryLock.postgres?() do
+    if AdvisoryLock.postgres?() do
       postgres_fk_map(repo)
     else
       sqlite_fk_map(repo)
@@ -519,13 +519,13 @@ defmodule GameServerWeb.RuntimeIntrospection do
      AND kcu.constraint_schema = rc.constraint_schema
     """
 
-    %{rows: rows} = Ecto.Adapters.SQL.query!(repo, sql, [], log: false)
+    %{rows: rows} = SQL.query!(repo, sql, [], log: false)
     Map.new(rows, fn [table, col, rule] -> {{table, col}, normalize_delete_rule(rule)} end)
   end
 
   defp sqlite_fk_map(repo) do
     %{rows: tables} =
-      Ecto.Adapters.SQL.query!(
+      SQL.query!(
         repo,
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
         [],
@@ -534,7 +534,7 @@ defmodule GameServerWeb.RuntimeIntrospection do
 
     Enum.reduce(tables, %{}, fn [table], acc ->
       %{rows: fks} =
-        Ecto.Adapters.SQL.query!(repo, "PRAGMA foreign_key_list(\"#{table}\")", [], log: false)
+        SQL.query!(repo, "PRAGMA foreign_key_list(\"#{table}\")", [], log: false)
 
       # PRAGMA foreign_key_list columns: id, seq, table, from, to, on_update, on_delete, match
       Enum.reduce(fks, acc, fn row, a ->

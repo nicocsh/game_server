@@ -10,7 +10,7 @@ func _before_stop() -> void:
 func _after_user_register(_user: Dictionary) -> void:
 	pass
 
-func _after_user_login(_user: Dictionary) -> void:
+func _after_user_logged_in(_user: Dictionary) -> void:
 	pass
 
 func _before_lobby_create(attrs: Dictionary) -> Dictionary:
@@ -34,19 +34,19 @@ func _after_lobby_leave(_user: Dictionary, _lobby: Dictionary) -> void:
 func _before_lobby_update(_lobby: Dictionary, attrs: Dictionary) -> Dictionary:
 	return attrs
 
-func _after_lobby_update(_lobby: Dictionary) -> void:
+func _after_lobby_updated(_lobby: Dictionary) -> void:
 	pass
 
 func _before_lobby_delete(lobby: Dictionary) -> Dictionary:
 	return lobby
 
-func _after_lobby_delete(_lobby: Dictionary) -> void:
+func _after_lobby_deleted(_lobby: Dictionary) -> void:
 	pass
 
-func _before_user_kicked(host: Dictionary, target: Dictionary, lobby: Dictionary):
+func _before_lobby_kick(host: Dictionary, target: Dictionary, lobby: Dictionary):
 	return [host, target, lobby]
 
-func _after_user_kicked(_host: Dictionary, _target: Dictionary, _lobby: Dictionary) -> void:
+func _after_lobby_kick(_host: Dictionary, _target: Dictionary, _lobby: Dictionary) -> void:
 	pass
 
 func _before_kv_get(_key: String, _opts: Dictionary) -> String:
@@ -104,8 +104,8 @@ func _message_received(peer_id: int, message: String):
 			_before_stop()
 		"after_user_register":
 			_after_user_register.callv(args)
-		"after_user_login":
-			_after_user_login.callv(args)
+		"after_user_logged_in":
+			_after_user_logged_in.callv(args)
 		"before_lobby_create":
 			_send_result(peer_id, request_id, await _before_lobby_create.callv(args))
 		"after_lobby_create":
@@ -120,16 +120,16 @@ func _message_received(peer_id: int, message: String):
 			_after_lobby_leave.callv(args)
 		"before_lobby_update":
 			_send_result(peer_id, request_id, await _before_lobby_update.callv(args))
-		"after_lobby_update":
-			_after_lobby_update.callv(args)
+		"after_lobby_updated":
+			_after_lobby_updated.callv(args)
 		"before_lobby_delete":
 			_send_result(peer_id, request_id, await _before_lobby_delete.callv(args))
-		"after_lobby_delete":
-			_after_lobby_delete.callv(args)
-		"before_user_kicked":
-			_send_result(peer_id, request_id, await _before_user_kicked.callv(args))
-		"after_user_kicked":
-			_after_user_kicked.callv(args)
+		"after_lobby_deleted":
+			_after_lobby_deleted.callv(args)
+		"before_lobby_kick":
+			_send_result(peer_id, request_id, await _before_lobby_kick.callv(args))
+		"after_lobby_kick":
+			_after_lobby_kick.callv(args)
 		"before_kv_get":
 			_send_result(peer_id, request_id, await _before_kv_get.callv(args))
 		"after_lobby_host_change":
@@ -161,7 +161,7 @@ func _get_custom_hooks():
 		if hook_name in ["after_startup",
 			"before_stop",
 			"after_user_register",
-			"after_user_login",
+			"after_user_logged_in",
 			"on_custom_hook"] || \
 			hook_name.begins_with("_"):
 			continue
