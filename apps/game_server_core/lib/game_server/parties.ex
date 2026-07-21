@@ -102,6 +102,18 @@ defmodule GameServer.Parties do
     :ok
   end
 
+  # Party-row cache: get_party is keyed by a version bumped on every party-row
+  # write. Membership/invite changes don't touch the party row, so they don't bump.
+  @party_cache_ttl_ms 60_000
+  defp party_cache_version, do: GameServer.Cache.get!({:parties, :version}) || 1
+
+  defp tap_bump_party({:ok, _} = result) do
+    _ = GameServer.Cache.bump_version({:parties, :version})
+    result
+  end
+
+  defp tap_bump_party(other), do: other
+
   # Cancel all pending invites for a party (used when party is disbanded/deleted).
   # Invalidates invite caches for all affected senders and recipients.
   defp cancel_pending_invites_for_party(party_id) do
@@ -194,11 +206,21 @@ defmodule GameServer.Parties do
 
   @doc "Get a party by ID. Returns nil if not found."
   @spec get_party(Ecto.UUID.t()) :: Party.t() | nil
+  @decorate cacheable(
+              key: {:parties, :get, party_cache_version(), id},
+              match: &(&1 != nil),
+              opts: [ttl: @party_cache_ttl_ms]
+            )
   def get_party(id), do: Repo.get_uuid(Party, id)
 
   @doc "Get a party by ID. Raises if not found."
   @spec get_party!(Ecto.UUID.t()) :: Party.t()
-  def get_party!(id), do: Repo.get_uuid!(Party, id)
+  def get_party!(id) do
+    case get_party(id) do
+      %Party{} = party -> party
+      nil -> raise Ecto.NoResultsError, queryable: Party
+    end
+  end
 
   @doc "Returns true if the given user is the leader of their current party."
   @spec leader?(User.t()) :: boolean()
@@ -280,7 +302,7 @@ defmodule GameServer.Parties do
         Repo.rollback(:already_in_party)
       end
 
-      case %Party{} |> Party.changeset(attrs) |> Repo.insert() do
+      case %Party{} |> Party.changeset(attrs) |> Repo.insert() |> tap_bump_party() do
         {:ok, party} ->
           case fresh_user |> Ecto.Changeset.change(%{party_id: party.id}) |> Repo.update() do
             {:ok, updated_user} ->
@@ -1063,6 +1085,7 @@ defmodule GameServer.Parties do
         party
         |> Party.changeset(attrs_to_use)
         |> Repo.update()
+        |> tap_bump_party()
         |> case do
           {:ok, updated} ->
             broadcast_party(updated.id, {:party_updated, with_party_members(updated)})
@@ -1455,6 +1478,7 @@ defmodule GameServer.Parties do
       # Delete the party
       Repo.delete!(party)
     end)
+    |> tap_bump_party()
     |> case do
       {:ok, _} ->
         # Invalidate caches and broadcast outside the transaction
@@ -1594,6 +1618,7 @@ defmodule GameServer.Parties do
       party
       |> Party.changeset(attrs)
       |> Repo.update()
+      |> tap_bump_party()
 
     case result do
       {:ok, updated} ->
@@ -1626,7 +1651,7 @@ defmodule GameServer.Parties do
         # Cancel all pending invites for this party
         cancel_pending_invites_for_party(party_id)
 
-        case Repo.delete(party) do
+        case Repo.delete(party) |> tap_bump_party() do
           {:ok, deleted} ->
             Enum.each(member_ids, &invalidate_user_cache/1)
             broadcast_party(party_id, {:party_disbanded, party_id})

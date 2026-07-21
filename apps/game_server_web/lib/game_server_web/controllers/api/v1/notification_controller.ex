@@ -4,6 +4,8 @@ defmodule GameServerWeb.Api.V1.NotificationController do
 
   import GameServerWeb.Helpers.ParamParser
 
+  alias GameServer.Accounts.Scope
+  alias GameServer.Accounts.User
   alias GameServer.Notifications
   alias GameServerWeb.Serializers
   alias OpenApiSpex.Schema
@@ -164,8 +166,8 @@ defmodule GameServerWeb.Api.V1.NotificationController do
   # ---------------------------------------------------------------------------
 
   def index(conn, params) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         {page, page_size} = parse_page_params(params)
 
         notifications =
@@ -193,8 +195,8 @@ defmodule GameServerWeb.Api.V1.NotificationController do
   end
 
   def create(conn, params) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         case Notifications.send_notification(user.id, params) do
           {:ok, notification} ->
             conn
@@ -233,8 +235,8 @@ defmodule GameServerWeb.Api.V1.NotificationController do
   end
 
   def delete(conn, %{"ids" => ids}) when is_list(ids) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         int_ids =
           ids
           |> Enum.map(&parse_id/1)

@@ -44,7 +44,7 @@ defmodule GameServerWeb.LobbyChannel do
     current_scope = Map.get(socket.assigns, :current_scope)
 
     with {:ok, lobby_id} <- Ecto.UUID.cast(lobby_id_str),
-         %Scope{user: %{id: user_id}} <- current_scope,
+         %Scope{user_id: user_id} <- current_scope,
          %GameServer.Lobbies.Lobby{} = lobby <- Lobbies.get_lobby(lobby_id) do
       user = Accounts.get_user(user_id)
 
@@ -227,7 +227,7 @@ defmodule GameServerWeb.LobbyChannel do
   @impl true
   def terminate(_reason, socket) do
     case socket.assigns do
-      %{lobby_id: lobby_id, spectator: true, current_scope: %{user: %{id: user_id}}}
+      %{lobby_id: lobby_id, spectator: true, current_scope: %{user_id: user_id}}
       when is_binary(lobby_id) ->
         SpectatorTracker.untrack(lobby_id, user_id)
         _ = Lobbies.unsubscribe_lobby(lobby_id)

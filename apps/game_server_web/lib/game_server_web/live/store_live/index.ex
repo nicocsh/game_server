@@ -1,6 +1,7 @@
 defmodule GameServerWeb.StoreLive.Index do
   use GameServerWeb, :live_view
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Payments
   alias GameServer.Payments.ProviderConfig
 
@@ -10,7 +11,10 @@ defmodule GameServerWeb.StoreLive.Index do
      socket
      |> assign(:page_title, gettext("Store"))
      |> assign(:catalog, Payments.list_catalog())
-     |> assign(:owned_entitlement_keys, owned_entitlement_keys(socket.assigns.current_scope.user))
+     |> assign(
+       :owned_entitlement_keys,
+       owned_entitlement_keys(Scope.user(socket.assigns.current_scope))
+     )
      |> assign(:payment_environment, ProviderConfig.environment())
      |> assign(:success_purchase, nil)}
   end
@@ -32,7 +36,7 @@ defmodule GameServerWeb.StoreLive.Index do
       "cancel_url" => cancel_url
     }
 
-    case Payments.create_stripe_checkout(socket.assigns.current_scope.user, attrs) do
+    case Payments.create_stripe_checkout(Scope.user(socket.assigns.current_scope), attrs) do
       {:ok, %{checkout_url: checkout_url}} ->
         {:noreply, redirect(socket, external: checkout_url)}
 
@@ -174,7 +178,7 @@ defmodule GameServerWeb.StoreLive.Index do
   end
 
   defp assign_success_purchase(%{assigns: %{live_action: :success}} = socket, params) do
-    user = socket.assigns.current_scope.user
+    user = Scope.user(socket.assigns.current_scope)
 
     purchase =
       case params["session_id"] do

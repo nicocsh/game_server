@@ -67,7 +67,7 @@ defmodule GameServerWeb.UserChannelTest do
     {:ok, socket} = connect(GameServerWeb.UserSocket, %{"token" => token})
     # verify connect assigned a current_scope (user auto-loaded)
     assert Map.has_key?(socket.assigns, :current_scope)
-    assert socket.assigns.current_scope.user.id == user.id
+    assert socket.assigns.current_scope.user_id == user.id
     {:ok, _, _socket} = subscribe_and_join(socket, "user:#{user.id}", %{})
     assert_push "updated", _initial_payload
 

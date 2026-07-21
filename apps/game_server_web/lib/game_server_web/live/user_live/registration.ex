@@ -116,8 +116,8 @@ defmodule GameServerWeb.UserLive.Registration do
   end
 
   @impl true
-  def mount(_params, _session, %{assigns: %{current_scope: %{user: user}}} = socket)
-      when user != nil do
+  def mount(_params, _session, %{assigns: %{current_scope: %{user_id: user_id}}} = socket)
+      when is_binary(user_id) do
     require Logger
     Logger.info("[Registration] User already logged in, redirecting to signed_in_path")
     {:ok, Phoenix.LiveView.redirect(socket, external: ~p"/users/settings")}

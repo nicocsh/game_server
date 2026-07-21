@@ -353,8 +353,8 @@ defmodule GameServerWeb.TournamentsLiveTest do
 
       html = view |> element("#join-btn") |> render_click()
 
-      # the game's own reason, shown verbatim, and no entry created
-      assert html =~ "not_enough_coins"
+      # the game's own reason, humanized for display, and no entry created
+      assert html =~ "Not enough coins"
       assert Tournaments.count_entries(tournament.id) == 0
       assert html =~ "Join"
     end

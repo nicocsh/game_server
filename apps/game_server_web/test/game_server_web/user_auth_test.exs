@@ -180,8 +180,8 @@ defmodule GameServerWeb.UserAuthTest do
       conn =
         conn |> put_session(:user_token, user_token) |> UserAuth.fetch_current_scope_for_user([])
 
-      assert conn.assigns.current_scope.user.id == user.id
-      assert conn.assigns.current_scope.user.authenticated_at == user.authenticated_at
+      assert conn.assigns.current_scope.user_id == user.id
+      assert conn.assigns.current_scope.authenticated_at == user.authenticated_at
       assert get_session(conn, :user_token) == user_token
     end
 
@@ -197,8 +197,8 @@ defmodule GameServerWeb.UserAuthTest do
         |> put_req_cookie(@remember_me_cookie, signed_token)
         |> UserAuth.fetch_current_scope_for_user([])
 
-      assert conn.assigns.current_scope.user.id == user.id
-      assert conn.assigns.current_scope.user.authenticated_at == user.authenticated_at
+      assert conn.assigns.current_scope.user_id == user.id
+      assert conn.assigns.current_scope.authenticated_at == user.authenticated_at
       assert get_session(conn, :user_token) == user_token
       assert get_session(conn, :user_remember_me)
 
@@ -230,8 +230,8 @@ defmodule GameServerWeb.UserAuthTest do
         |> put_req_cookie(@remember_me_cookie, signed_token)
         |> UserAuth.fetch_current_scope_for_user([])
 
-      assert conn.assigns.current_scope.user.id == user.id
-      assert conn.assigns.current_scope.user.authenticated_at == user.authenticated_at
+      assert conn.assigns.current_scope.user_id == user.id
+      assert conn.assigns.current_scope.authenticated_at == user.authenticated_at
       assert new_token = get_session(conn, :user_token)
       assert new_token != token
       assert %{value: new_signed_token, max_age: max_age} = conn.resp_cookies[@remember_me_cookie]
@@ -252,7 +252,7 @@ defmodule GameServerWeb.UserAuthTest do
       {:cont, updated_socket} =
         UserAuth.on_mount(:mount_current_scope, %{}, session, %LiveView.Socket{})
 
-      assert updated_socket.assigns.current_scope.user.id == user.id
+      assert updated_socket.assigns.current_scope.user_id == user.id
     end
 
     test "assigns nil to current_scope assign if there isn't a valid user_token", %{conn: conn} do
@@ -283,7 +283,7 @@ defmodule GameServerWeb.UserAuthTest do
       {:cont, updated_socket} =
         UserAuth.on_mount(:require_authenticated, %{}, session, %LiveView.Socket{})
 
-      assert updated_socket.assigns.current_scope.user.id == user.id
+      assert updated_socket.assigns.current_scope.user_id == user.id
     end
 
     test "redirects to login page if there isn't a valid user_token", %{conn: conn} do

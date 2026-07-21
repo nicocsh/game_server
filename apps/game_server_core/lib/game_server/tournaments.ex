@@ -20,6 +20,8 @@ defmodule GameServer.Tournaments do
   import Ecto.Query, warn: false
   require Logger
 
+  use Nebulex.Caching, cache: GameServer.Cache
+
   alias GameServer.Accounts.User
   alias GameServer.Repo
   alias GameServer.Tournaments.Bracket
@@ -31,6 +33,12 @@ defmodule GameServer.Tournaments do
   alias Crontab.Scheduler, as: CronScheduler
 
   @pubsub GameServer.PubSub
+
+  # Cached reads keyed by a version counter bumped on every tournament-row write,
+  # so any write (single or bulk) invalidates all cached tournament rows at once.
+  @tournament_cache_ttl_ms 60_000
+  defp tournament_cache_version, do: GameServer.Cache.get!({:tournaments, :version}) || 1
+  defp bump_tournament_cache, do: GameServer.Cache.bump_version({:tournaments, :version})
 
   # Hook dispatches and broadcasts must never run while a lock/transaction is
   # open: the hook runs in another process, and anything it writes contends
@@ -68,6 +76,7 @@ defmodule GameServer.Tournaments do
     %Tournament{}
     |> Tournament.changeset(attrs)
     |> Repo.insert()
+    |> tap_bump_tournament()
   end
 
   @spec update_tournament(Tournament.t(), map()) ::
@@ -76,10 +85,20 @@ defmodule GameServer.Tournaments do
     tournament
     |> Tournament.changeset(attrs)
     |> Repo.update()
+    |> tap_bump_tournament()
   end
 
   @spec delete_tournament(Tournament.t()) :: {:ok, Tournament.t()} | {:error, term()}
-  def delete_tournament(%Tournament{} = tournament), do: Repo.delete(tournament)
+  def delete_tournament(%Tournament{} = tournament),
+    do: tournament |> Repo.delete() |> tap_bump_tournament()
+
+  # Bump the tournament cache version on any successful tournament-row write.
+  defp tap_bump_tournament({:ok, _} = result) do
+    bump_tournament_cache()
+    result
+  end
+
+  defp tap_bump_tournament(other), do: other
 
   @doc "Cancels a tournament (terminal, no hooks fired, no recurrence spawn)."
   @spec cancel_tournament(Tournament.t()) :: {:ok, Tournament.t()} | {:error, term()}
@@ -114,10 +133,19 @@ defmodule GameServer.Tournaments do
     do: Tournament.changeset(tournament, attrs)
 
   @spec get_tournament(Ecto.UUID.t()) :: Tournament.t() | nil
+  @decorate cacheable(
+              key: {:tournaments, :get, tournament_cache_version(), id},
+              opts: [ttl: @tournament_cache_ttl_ms]
+            )
   def get_tournament(id) when is_binary(id), do: Repo.get(Tournament, id)
 
   @spec get_tournament!(Ecto.UUID.t()) :: Tournament.t()
-  def get_tournament!(id) when is_binary(id), do: Repo.get!(Tournament, id)
+  def get_tournament!(id) when is_binary(id) do
+    case get_tournament(id) do
+      %Tournament{} = tournament -> tournament
+      nil -> raise Ecto.NoResultsError, queryable: Tournament
+    end
+  end
 
   @doc """
   The current occurrence for a slug: the latest one that is not finished or
@@ -446,7 +474,7 @@ defmodule GameServer.Tournaments do
   defp past?(%DateTime{} = at, now), do: DateTime.compare(at, now) != :gt
 
   defp update_state(tournament, state) do
-    tournament |> Ecto.Changeset.change(state: state) |> Repo.update()
+    tournament |> Ecto.Changeset.change(state: state) |> Repo.update() |> tap_bump_tournament()
   end
 
   @doc """

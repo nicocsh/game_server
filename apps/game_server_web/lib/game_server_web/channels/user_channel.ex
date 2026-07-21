@@ -79,11 +79,11 @@ defmodule GameServerWeb.UserChannel do
     case Ecto.UUID.cast(user_id_str) do
       {:ok, user_id} ->
         case current_scope do
-          %Scope{user: %User{id: ^user_id} = scoped_user} ->
-            user = Accounts.get_user(user_id) || scoped_user
+          %Scope{user_id: ^user_id} ->
+            user = current_user(socket)
             GameServerWeb.ConnectionTracker.register_user_channel(user_id)
             send(self(), {:after_join, user})
-            {:ok, assign(socket, :user_id, user_id)}
+            {:ok, socket}
 
           _ ->
             Logger.warning("UserChannel: unauthorized join attempt for user=#{user_id}")
@@ -115,8 +115,7 @@ defmodule GameServerWeb.UserChannel do
       if reserved? do
         {:reply, {:error, %{error: "reserved_hook_name"}}, socket}
       else
-        # Re-fetch user from DB to get current lobby_id / state
-        user = Accounts.get_user(socket.assigns.user_id) || socket.assigns.current_scope.user
+        user = current_user(socket)
 
         # Typed hooks (registered <FnName>Request/<FnName>Reply schemas)
         # accept a single JSON object argument and reply with a JSON map.
@@ -192,7 +191,7 @@ defmodule GameServerWeb.UserChannel do
 
       {:ok, peer} =
         GameServerWeb.WebRTCPeer.start_link(
-          user_id: socket.assigns.user_id,
+          user_id: socket.assigns.current_scope.user_id,
           channel_pid: self()
         )
 
@@ -332,11 +331,7 @@ defmodule GameServerWeb.UserChannel do
 
   @impl true
   def handle_info(:refresh_presence, socket) do
-    user_id = socket.assigns[:user_id]
-
-    if user_id do
-      Accounts.touch_last_seen_by_id(user_id)
-    end
+    Accounts.touch_last_seen_by_id(socket.assigns.current_scope.user_id)
 
     Process.send_after(self(), :refresh_presence, @presence_refresh_interval)
     {:noreply, socket}
@@ -493,7 +488,7 @@ defmodule GameServerWeb.UserChannel do
 
   @impl true
   def terminate(_reason, socket) do
-    user_id = Map.get(socket.assigns, :user_id)
+    user_id = socket.assigns.current_scope.user_id
 
     # Clean up WebRTC peer if active
     if peer = Map.get(socket.assigns, :webrtc_peer) do
@@ -591,7 +586,7 @@ defmodule GameServerWeb.UserChannel do
   end
 
   defp kv_read_allowed?(socket, key, user_id, lobby_id) do
-    caller = fresh_current_scope(socket)
+    caller = current_user(socket)
 
     case Hooks.internal_call(:before_kv_get, [key, %{user_id: user_id, lobby_id: lobby_id}],
            caller: caller
@@ -601,10 +596,10 @@ defmodule GameServerWeb.UserChannel do
     end
   end
 
-  defp fresh_current_scope(socket) do
-    user = Accounts.get_user(socket.assigns.user_id) || socket.assigns.current_scope.user
-    Scope.for_user(user)
-  end
+  # The authenticated user, resolved fresh (cached) from the scope's id — never a
+  # connect-time snapshot, so live state (lobby_id/party_id/online) is current.
+  # nil only if the account was deleted mid-session.
+  defp current_user(socket), do: Scope.user(socket.assigns.current_scope)
 
   defp kv_subscribe_reply(key, user_id, lobby_id, payload) do
     reply = %{subscribed: true, key: key, user_id: user_id, lobby_id: lobby_id}
@@ -646,17 +641,17 @@ defmodule GameServerWeb.UserChannel do
   defp kv_access_allowed?(:server_only, _caller, _user_id, _lobby_id), do: false
   defp kv_access_allowed?(_access, _caller, _user_id, _lobby_id), do: false
 
-  defp caller_owns?(%Scope{user: %{id: caller_id}}, user_id),
+  defp caller_owns?(%User{id: caller_id}, user_id),
     do: is_binary(user_id) and caller_id == user_id
 
   defp caller_owns?(_caller, _user_id), do: false
 
-  defp caller_in_lobby?(%Scope{user: %{lobby_id: caller_lobby_id}}, lobby_id),
+  defp caller_in_lobby?(%User{lobby_id: caller_lobby_id}, lobby_id),
     do: is_binary(lobby_id) and caller_lobby_id == lobby_id
 
   defp caller_in_lobby?(_caller, _lobby_id), do: false
 
-  defp caller_admin?(%Scope{user: %{is_admin: true}}), do: true
+  defp caller_admin?(%User{is_admin: true}), do: true
   defp caller_admin?(_caller), do: false
 
   defp parse_optional_id(value), do: GameServer.UUIDv7.cast_or_nil(value)
@@ -687,7 +682,7 @@ defmodule GameServerWeb.UserChannel do
     config = Application.get_env(:game_server_web, GameServerWeb.Plugs.RateLimiter, [])
 
     if Keyword.get(config, :enabled, true) do
-      user_id = socket.assigns.user_id
+      user_id = socket.assigns.current_scope.user_id
       limit = Keyword.get(config, :ws_limit, @default_ws_rate_limit)
       window = Keyword.get(config, :ws_window, @default_ws_rate_window)
 
@@ -720,7 +715,7 @@ defmodule GameServerWeb.UserChannel do
     config = Application.get_env(:game_server_web, GameServerWeb.Plugs.RateLimiter, [])
 
     if Keyword.get(config, :enabled, true) do
-      user_id = socket.assigns.user_id
+      user_id = socket.assigns.current_scope.user_id
       limit = Keyword.get(config, :ice_limit, @default_ice_rate_limit)
       window = Keyword.get(config, :ice_window, @default_ice_rate_window)
 

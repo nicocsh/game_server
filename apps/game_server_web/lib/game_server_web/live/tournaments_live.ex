@@ -14,6 +14,7 @@ defmodule GameServerWeb.TournamentsLive do
   """
   use GameServerWeb, :live_view
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Accounts.User
   alias GameServer.Tournaments
   alias GameServer.Tournaments.Tournament
@@ -42,7 +43,7 @@ defmodule GameServerWeb.TournamentsLive do
 
   defp current_user_id(socket) do
     case socket.assigns[:current_scope] do
-      %{user: %{id: id}} -> id
+      %{user_id: id} -> id
       _ -> nil
     end
   end
@@ -131,8 +132,8 @@ defmodule GameServerWeb.TournamentsLive do
   def handle_event("newer_edition", _params, socket), do: move_edition(socket, -1)
 
   defp with_current_user(socket, fun) do
-    case socket.assigns[:current_scope] do
-      %{user: %User{} = user} ->
+    case Scope.user(socket.assigns[:current_scope]) do
+      %User{} = user ->
         socket =
           case fun.(user, socket.assigns.tournament) do
             {:ok, message} ->
@@ -158,7 +159,16 @@ defmodule GameServerWeb.TournamentsLive do
   defp entry_error_message(:not_registered), do: gettext("You are not registered.")
   defp entry_error_message(:already_drawn), do: gettext("The bracket has already been drawn.")
 
-  # Anything else comes from a game's own hook, so show the reason verbatim.
+  # A hook can reject with its own reason (entry fee, gate, ...). A binary is
+  # already player-facing; an atom is humanized ("not_enough_coins" → "Not
+  # enough coins") so game-specific reasons read cleanly without core needing
+  # to know them. Anything else falls back to the inspected reason.
+  defp entry_error_message(reason) when is_binary(reason), do: reason
+
+  defp entry_error_message(reason) when is_atom(reason) do
+    reason |> Atom.to_string() |> String.replace("_", " ") |> String.capitalize()
+  end
+
   defp entry_error_message(reason),
     do: LiveHelpers.failure_message(gettext("Failed"), reason)
 
@@ -350,7 +360,7 @@ defmodule GameServerWeb.TournamentsLive do
   # Landing on a bracket you are in shows you by default. A shared `?entry=`
   # link names someone specific, so it wins over this.
   defp own_entry(socket, tournament, bracket, entries) do
-    with %{user: %{id: user_id}} when is_binary(user_id) <- socket.assigns[:current_scope],
+    with %{user_id: user_id} when is_binary(user_id) <- socket.assigns[:current_scope],
          %{bracket_index: index} = entry when index == bracket.index <-
            Tournaments.get_entry(tournament.id, user_id) do
       Map.get(entries, entry.id)

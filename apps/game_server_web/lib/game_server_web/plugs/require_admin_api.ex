@@ -7,16 +7,18 @@ defmodule GameServerWeb.Plugs.RequireAdminApi do
 
   import Plug.Conn
 
+  alias GameServer.Accounts.Scope
+
   @spec init(keyword()) :: keyword()
   def init(opts), do: opts
 
   @spec call(Plug.Conn.t(), keyword()) :: Plug.Conn.t()
   def call(conn, _opts) do
-    case conn.assigns[:current_scope] do
-      %{user: %{is_admin: true}} ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %{is_admin: true} ->
         conn
 
-      %{user: _user} ->
+      %{} ->
         forbidden(conn)
 
       _ ->

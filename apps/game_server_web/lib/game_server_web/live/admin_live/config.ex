@@ -1,6 +1,7 @@
 defmodule GameServerWeb.AdminLive.Config do
   use GameServerWeb, :live_view
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Accounts.User
   alias GameServer.Accounts.UserNotifier
   alias GameServer.Content
@@ -1542,7 +1543,7 @@ defmodule GameServerWeb.AdminLive.Config do
                   Mailbox Preview
                 </a>
               <% end %>
-              <%= if @current_scope && @current_scope.user && @current_scope.user.email do %>
+              <%= if @current_scope && Scope.user(@current_scope) && Scope.user(@current_scope).email do %>
                 <button phx-click="send_test_email" class="btn btn-outline btn-accent">
                   Send test email
                 </button>
@@ -2067,7 +2068,7 @@ defmodule GameServerWeb.AdminLive.Config do
     args = parse_hook_args(args_text)
     format = if params["format"] == "protobuf", do: :protobuf, else: :json
 
-    caller = socket.assigns.current_scope && socket.assigns.current_scope.user
+    caller = socket.assigns.current_scope && Scope.user(socket.assigns.current_scope)
 
     {duration_us, result} =
       :timer.tc(fn -> run_hook_test(plugin, fn_name, args, format, caller) end)
@@ -2081,7 +2082,7 @@ defmodule GameServerWeb.AdminLive.Config do
   end
 
   def handle_event("send_test_email", _params, socket) do
-    user = socket.assigns.current_scope && socket.assigns.current_scope.user
+    user = socket.assigns.current_scope && Scope.user(socket.assigns.current_scope)
 
     case user && user.email do
       nil ->

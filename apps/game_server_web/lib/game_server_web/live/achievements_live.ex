@@ -7,6 +7,7 @@ defmodule GameServerWeb.AchievementsLive do
   """
   use GameServerWeb, :live_view
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Achievements
   alias GameServer.Achievements.Achievement
   alias GameServerWeb.Plugs.FeatureGate
@@ -93,12 +94,7 @@ defmodule GameServerWeb.AchievementsLive do
   # Helpers
   # ---------------------------------------------------------------------------
 
-  defp get_user(socket) do
-    case socket.assigns do
-      %{current_scope: %{user: u}} when u != nil -> u
-      _ -> nil
-    end
-  end
+  defp get_user(socket), do: Scope.user(socket.assigns[:current_scope])
 
   defp load_achievements(socket) do
     user = get_user(socket)
@@ -141,7 +137,7 @@ defmodule GameServerWeb.AchievementsLive do
             <h1 class="text-3xl font-bold">
               {gettext("Achievements")}
               <span class="text-base-content/50 font-normal">
-                <%= if @current_scope && @current_scope.user do %>
+                <%= if @current_scope && Scope.user(@current_scope) do %>
                   ({@unlocked_count}/{@total_count})
                 <% else %>
                   ({@total_count})
@@ -151,7 +147,7 @@ defmodule GameServerWeb.AchievementsLive do
           </div>
 
           <%!-- Filter buttons (only for logged-in users) --%>
-          <%= if @current_scope && @current_scope.user do %>
+          <%= if @current_scope && Scope.user(@current_scope) do %>
             <div class="flex flex-wrap gap-2">
               <button
                 :for={
@@ -176,7 +172,7 @@ defmodule GameServerWeb.AchievementsLive do
         </div>
 
         <%!-- Overall progress bar (logged-in users) --%>
-        <%= if @current_scope && @current_scope.user && @total_count > 0 do %>
+        <%= if @current_scope && Scope.user(@current_scope) && @total_count > 0 do %>
           <div class="bg-base-200 rounded-xl p-4">
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm font-medium">
@@ -209,7 +205,7 @@ defmodule GameServerWeb.AchievementsLive do
             <.achievement_card
               :for={item <- @achievements}
               item={item}
-              logged_in={@current_scope != nil && @current_scope.user != nil}
+              logged_in={@current_scope != nil && Scope.user(@current_scope) != nil}
               locale={@locale}
             />
           </div>

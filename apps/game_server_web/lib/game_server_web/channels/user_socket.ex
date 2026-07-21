@@ -116,7 +116,7 @@ defmodule GameServerWeb.UserSocket do
   @impl true
   def id(socket) do
     case socket.assigns[:current_scope] do
-      %{user: %{id: user_id}} -> "user_socket:#{user_id}"
+      %{user_id: user_id} -> "user_socket:#{user_id}"
       _ -> nil
     end
   end

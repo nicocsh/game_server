@@ -2,6 +2,7 @@ defmodule GameServerWeb.Api.V1.MatchmakingController do
   use GameServerWeb, :controller
   use OpenApiSpex.ControllerSpecs
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Matchmaking
   alias OpenApiSpex.Schema
 
@@ -70,7 +71,7 @@ defmodule GameServerWeb.Api.V1.MatchmakingController do
   )
 
   def create(conn, params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     case Matchmaking.join(
            user,
@@ -107,7 +108,7 @@ defmodule GameServerWeb.Api.V1.MatchmakingController do
   )
 
   def delete(conn, _params) do
-    cancelled = Matchmaking.cancel(conn.assigns.current_scope.user.id)
+    cancelled = Matchmaking.cancel(conn.assigns.current_scope.user_id)
     json(conn, %{data: %{cancelled: cancelled}})
   end
 
@@ -128,7 +129,7 @@ defmodule GameServerWeb.Api.V1.MatchmakingController do
   )
 
   def me(conn, _params) do
-    case Matchmaking.current_ticket(conn.assigns.current_scope.user.id) do
+    case Matchmaking.current_ticket(conn.assigns.current_scope.user_id) do
       nil -> json(conn, %{data: nil})
       ticket -> json(conn, %{data: serialize(ticket)})
     end

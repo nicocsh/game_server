@@ -410,7 +410,7 @@ defmodule GameServerWeb.UserLive.Settings.GroupsTab do
                       </div>
                     </div>
                     <button
-                      :if={u.id != @current_scope.user.id}
+                      :if={u.id != @current_scope.user_id}
                       phx-click="group_invite_user"
                       phx-value-group_id={@group_detail.id}
                       phx-value-user_id={u.id}

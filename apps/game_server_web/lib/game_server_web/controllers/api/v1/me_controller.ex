@@ -2,6 +2,7 @@ defmodule GameServerWeb.Api.V1.MeController do
   use GameServerWeb, :controller
   use OpenApiSpex.ControllerSpecs
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Accounts.User
   alias OpenApiSpex.Schema
 
@@ -74,8 +75,8 @@ defmodule GameServerWeb.Api.V1.MeController do
   def show(conn, _params) do
     # Guardian pipeline has already authenticated and loaded the user
     # into current_scope via AssignCurrentScope plug
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         json(conn, %{
           id: user.id,
           email: user.email || "",
@@ -125,7 +126,7 @@ defmodule GameServerWeb.Api.V1.MeController do
   )
 
   def update_password(conn, %{"password" => _} = params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     if password_change_authorized?(user, params) do
       case GameServer.Accounts.update_user_password(user, params) do
@@ -184,7 +185,7 @@ defmodule GameServerWeb.Api.V1.MeController do
   )
 
   def update_display_name(conn, %{"display_name" => _} = params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     case GameServer.Accounts.update_user_display_name(user, params) do
       {:ok, user} ->
@@ -227,7 +228,7 @@ defmodule GameServerWeb.Api.V1.MeController do
   )
 
   def update_username(conn, %{"username" => _} = params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     case GameServer.Accounts.update_username(user, params) do
       {:ok, user} ->
@@ -266,7 +267,7 @@ defmodule GameServerWeb.Api.V1.MeController do
   )
 
   def delete(conn, _params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     case GameServer.Accounts.delete_user(user) do
       {:ok, _} ->

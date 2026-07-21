@@ -227,7 +227,7 @@ defmodule GameServerWeb.UserLive.Settings.FriendsTab do
                     {LiveHelpers.public_user_name(s)}
                     <span class="text-xs text-base-content/60 ml-2">(id: {s.id})</span>
                   </div>
-                  <div :if={s.id != @current_scope.user.id}>
+                  <div :if={s.id != @current_scope.user_id}>
                     <button
                       phx-click="send_friend"
                       phx-value-target={s.id}

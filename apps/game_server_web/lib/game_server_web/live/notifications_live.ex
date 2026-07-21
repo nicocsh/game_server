@@ -1,6 +1,7 @@
 defmodule GameServerWeb.NotificationsLive do
   use GameServerWeb, :live_view
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Notifications
   alias GameServerWeb.LiveHelpers
 
@@ -108,7 +109,7 @@ defmodule GameServerWeb.NotificationsLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    user = socket.assigns.current_scope.user
+    user = Scope.user(socket.assigns.current_scope)
 
     if connected?(socket) do
       Notifications.subscribe(user.id)
@@ -150,7 +151,7 @@ defmodule GameServerWeb.NotificationsLive do
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    user = socket.assigns.current_scope.user
+    user = Scope.user(socket.assigns.current_scope)
     Notifications.delete_notifications(user.id, [id])
 
     {:noreply,
@@ -160,7 +161,7 @@ defmodule GameServerWeb.NotificationsLive do
   end
 
   def handle_event("delete_all", _params, socket) do
-    user = socket.assigns.current_scope.user
+    user = Scope.user(socket.assigns.current_scope)
 
     all_ids =
       Notifications.list_notifications(user.id, page: 1, page_size: 10_000)
@@ -177,7 +178,7 @@ defmodule GameServerWeb.NotificationsLive do
 
   @impl true
   def handle_info({:notification_created, _notification}, socket) do
-    user = socket.assigns.current_scope.user
+    user = Scope.user(socket.assigns.current_scope)
     # Auto-mark new notifications as read since the user is viewing the page
     Notifications.mark_all_notifications_read(user.id)
     {:noreply, reload_notifications(socket)}
@@ -248,7 +249,7 @@ defmodule GameServerWeb.NotificationsLive do
   defp action_for_metadata(_), do: nil
 
   defp reload_notifications(socket) do
-    user = socket.assigns.current_scope.user
+    user = Scope.user(socket.assigns.current_scope)
     page = socket.assigns.notif_page
     page_size = socket.assigns.notif_page_size
 

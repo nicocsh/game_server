@@ -44,9 +44,14 @@ defmodule GameServer.Chat do
     GameServer.Cache.get!({:chat, :version, chat_type, chat_ref_id}) || 1
   end
 
+  # Global row-version for get_message/1 (no chat_type/ref available at read time).
+  defp message_row_version, do: GameServer.Cache.get!({:chat, :message_version}) || 1
+  defp bump_message_row, do: GameServer.Cache.bump_version({:chat, :message_version})
+
   defp invalidate_chat_cache(chat_type, chat_ref_id) do
     GameServer.Async.run(fn ->
       _ = GameServer.Cache.bump_version({:chat, :version, chat_type, chat_ref_id})
+      _ = bump_message_row()
       :ok
     end)
 
@@ -743,6 +748,11 @@ defmodule GameServer.Chat do
 
   @doc "Get a single message by id."
   @spec get_message(Ecto.UUID.t()) :: Message.t() | nil
+  @decorate cacheable(
+              key: {:chat, :message, message_row_version(), id},
+              match: &(&1 != nil),
+              opts: [ttl: @chat_cache_ttl_ms]
+            )
   def get_message(id) do
     Repo.get(Message, id)
   end

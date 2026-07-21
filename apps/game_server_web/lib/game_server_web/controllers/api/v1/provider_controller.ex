@@ -3,6 +3,7 @@ defmodule GameServerWeb.Api.V1.ProviderController do
   use OpenApiSpex.ControllerSpecs
 
   alias GameServer.Accounts
+  alias GameServer.Accounts.Scope
 
   operation(:link_device,
     operation_id: "link_device",
@@ -27,7 +28,7 @@ defmodule GameServerWeb.Api.V1.ProviderController do
   )
 
   def link_device(conn, %{"device_id" => device_id}) when is_binary(device_id) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     case Accounts.link_device_id(user, device_id) do
       {:ok, _user} ->
@@ -63,7 +64,7 @@ defmodule GameServerWeb.Api.V1.ProviderController do
   )
 
   def unlink_device(conn, _params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     case Accounts.unlink_device_id(user) do
       {:ok, _user} ->
@@ -106,7 +107,7 @@ defmodule GameServerWeb.Api.V1.ProviderController do
   )
 
   def unlink(conn, %{"provider" => provider}) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     provider_atom =
       case provider do

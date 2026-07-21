@@ -336,7 +336,7 @@ defmodule GameServerWeb.HostLayouts do
 
     notif_unread_count =
       if assigns[:current_scope] do
-        GameServer.Notifications.count_unread_notifications(assigns.current_scope.user.id)
+        GameServer.Notifications.count_unread_notifications(assigns.current_scope.user_id)
       else
         0
       end

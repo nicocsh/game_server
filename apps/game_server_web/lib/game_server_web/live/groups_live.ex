@@ -1,6 +1,8 @@
 defmodule GameServerWeb.GroupsLive do
   use GameServerWeb, :live_view
 
+  alias GameServer.Accounts.Scope
+  alias GameServer.Accounts.User
   alias GameServer.Groups
   alias GameServerWeb.LiveHelpers
   alias GameServerWeb.Plugs.FeatureGate
@@ -15,11 +17,7 @@ defmodule GameServerWeb.GroupsLive do
 
     if connected?(socket), do: Groups.subscribe_groups()
 
-    user =
-      case socket.assigns do
-        %{current_scope: %{user: u}} when u != nil -> u
-        _ -> nil
-      end
+    user = Scope.user(socket.assigns[:current_scope])
 
     # Build a set of group IDs the user has pending requests for
     pending_request_ids =
@@ -157,8 +155,8 @@ defmodule GameServerWeb.GroupsLive do
   def handle_event("join_group", %{"id" => id}, socket) do
     group_id = id
 
-    case socket.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(socket.assigns.current_scope) do
+      %User{} = user ->
         case Groups.join_group(user.id, group_id) do
           {:ok, _member} ->
             {:noreply,
@@ -185,8 +183,8 @@ defmodule GameServerWeb.GroupsLive do
   def handle_event("request_join", %{"id" => id}, socket) do
     group_id = id
 
-    case socket.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(socket.assigns.current_scope) do
+      %User{} = user ->
         case Groups.request_join(user.id, group_id) do
           {:ok, _request} ->
             {:noreply,
@@ -220,8 +218,8 @@ defmodule GameServerWeb.GroupsLive do
   def handle_event("leave_group", %{"id" => id}, socket) do
     group_id = id
 
-    case socket.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(socket.assigns.current_scope) do
+      %User{} = user ->
         case Groups.leave_group(user.id, group_id) do
           {:ok, _} ->
             {:noreply,
@@ -518,7 +516,7 @@ defmodule GameServerWeb.GroupsLive do
 
   defp render_group_action_button(assigns) do
     ~H"""
-    <%= if @current_scope && @current_scope.user do %>
+    <%= if @current_scope && Scope.user(@current_scope) do %>
       <%= cond do %>
         <% MapSet.member?(@member_group_ids, @group.id) -> %>
           <span class="badge badge-success badge-sm">{gettext("Member")}</span>
@@ -671,9 +669,16 @@ defmodule GameServerWeb.GroupsLive do
 
   defp render_detail_action_button(assigns) do
     ~H"""
-    <%= if @current_scope && @current_scope.user do %>
+    <%= if @current_scope && Scope.user(@current_scope) do %>
       <%= cond do %>
         <% MapSet.member?(@member_group_ids, @selected_group.id) -> %>
+          <.link
+            navigate={~p"/chat?#{[type: "group", id: @selected_group.id]}"}
+            class="btn btn-outline btn-sm"
+            id="group-chat-btn"
+          >
+            {gettext("Open chat")}
+          </.link>
           <button
             phx-click="leave_group"
             phx-value-id={@selected_group.id}

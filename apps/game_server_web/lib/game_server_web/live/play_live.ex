@@ -19,11 +19,12 @@ defmodule GameServerWeb.PlayLive do
   """
   use GameServerWeb, :live_view
 
+  alias GameServer.Accounts.Scope
   alias GameServerWeb.Auth.Guardian
 
   @impl true
   def mount(_params, _session, socket) do
-    {game_src, token_data} = build_game_url(socket.assigns.current_scope)
+    {game_src, token_data} = build_game_url(Scope.user(socket.assigns.current_scope))
 
     {:ok,
      assign(socket,
@@ -74,9 +75,8 @@ defmodule GameServerWeb.PlayLive do
   # ---------------------------------------------------------------------------
 
   defp build_game_url(nil), do: {"/game/index.html", %{}}
-  defp build_game_url(%{user: nil}), do: {"/game/index.html", %{}}
 
-  defp build_game_url(%{user: user}) do
+  defp build_game_url(user) do
     with {:ok, access_token, _claims} <-
            Guardian.encode_and_sign(user, %{}, token_type: "access"),
          {:ok, refresh_token, _claims} <-

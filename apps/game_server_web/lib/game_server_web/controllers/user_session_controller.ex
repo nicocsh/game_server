@@ -2,6 +2,7 @@ defmodule GameServerWeb.UserSessionController do
   use GameServerWeb, :controller
 
   alias GameServer.Accounts
+  alias GameServer.Accounts.Scope
   alias GameServerWeb.UserAuth
 
   def create(conn, %{"_action" => "confirmed"} = params) do
@@ -59,7 +60,7 @@ defmodule GameServerWeb.UserSessionController do
   end
 
   def update_password(conn, %{"user" => user_params} = params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     if Accounts.sudo_mode?(user) do
       {:ok, {_user, expired_tokens}} = Accounts.update_user_password(user, user_params)
