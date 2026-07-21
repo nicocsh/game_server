@@ -485,7 +485,17 @@ defmodule GameServer.Hooks do
       :after_purchase_revoked,
       :after_entitlement_changed,
       :on_custom_hook,
-      :before_kv_get
+      :before_kv_get,
+      # Plugin declaration/metadata functions. The host calls these to discover a
+      # plugin's env vars, notification types, realtime events and wire schemas;
+      # they are not a client-facing API, so they must not be RPC-callable (or
+      # appear in the RPC list) — a client could otherwise read a plugin's whole
+      # config surface via call_hook.
+      :env_vars,
+      :notification_types,
+      :realtime_events,
+      :kv_schemas,
+      :metadata_schemas
     ])
   end
 

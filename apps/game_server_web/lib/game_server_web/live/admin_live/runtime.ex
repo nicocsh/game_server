@@ -570,6 +570,7 @@ defmodule GameServerWeb.AdminLive.Runtime do
                       <th>Kind</th>
                       <th>Related</th>
                       <th>Key</th>
+                      <th>On delete</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -578,6 +579,20 @@ defmodule GameServerWeb.AdminLive.Runtime do
                       <td>{a.kind}</td>
                       <td class="font-mono">{a.related_table || a.related}</td>
                       <td class="font-mono">{a.owner_key}</td>
+                      <td>
+                        <span
+                          :if={a.on_delete}
+                          class={[
+                            "badge badge-xs",
+                            a.on_delete == "cascade" && "badge-error",
+                            a.on_delete == "nilify" && "badge-warning"
+                          ]}
+                          title="What happens to this row when the referenced row is deleted"
+                        >
+                          {a.on_delete}
+                        </span>
+                        <span :if={is_nil(a.on_delete)} class="opacity-40">—</span>
+                      </td>
                     </tr>
                   </tbody>
                 </table>

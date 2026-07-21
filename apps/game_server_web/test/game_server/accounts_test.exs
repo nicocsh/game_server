@@ -657,4 +657,39 @@ defmodule GameServer.AccountsTest do
       assert count == search_count
     end
   end
+
+  describe "list_all_users/2 (admin search) and its boundary with search_users/2" do
+    test "finds a user by full id" do
+      target = user_fixture()
+      other = user_fixture()
+
+      ids = Accounts.list_all_users(%{search: target.id}) |> Enum.map(& &1.id)
+      assert target.id in ids
+      refute other.id in ids
+    end
+
+    test "admin search matches sensitive fields like email; player search does not" do
+      user = user_fixture()
+      email = user.email
+
+      # Admin can find by email.
+      assert Accounts.list_all_users(%{search: email}) |> Enum.any?(&(&1.id == user.id))
+
+      # Privacy boundary: the public player search must NOT match email.
+      refute Accounts.search_users(email) |> Enum.any?(&(&1.id == user.id))
+    end
+
+    test "facets filter (online) and count agree with the listing" do
+      online = user_fixture()
+      {:ok, _} = online |> Ecto.Changeset.change(is_online: true) |> GameServer.Repo.update()
+      _offline = user_fixture()
+
+      filters = %{facets: ["online"]}
+      listed = Accounts.list_all_users(filters, page_size: 100)
+
+      assert Enum.all?(listed, & &1.is_online)
+      assert online.id in Enum.map(listed, & &1.id)
+      assert Accounts.count_list_all_users(filters) == length(listed)
+    end
+  end
 end
