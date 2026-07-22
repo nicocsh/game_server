@@ -96,6 +96,9 @@ defmodule GameServerWeb.AdminLive.Index do
           <.link navigate={~p"/admin/runtime"} class="btn btn-outline">
             Runtime
           </.link>
+          <.link href={~p"/admin/oban"} class="btn btn-outline">
+            Jobs ({@oban_stats.total})
+          </.link>
         </div>
 
         <div class="card bg-base-200">
@@ -544,6 +547,40 @@ defmodule GameServerWeb.AdminLive.Index do
                 </div>
               </div>
 
+              <%!-- 18. Background jobs --%>
+              <div class="card bg-base-100 p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="text-sm font-semibold">Background jobs</div>
+                  <.link href={~p"/admin/oban"} class="link link-primary text-xs">
+                    Dashboard →
+                  </.link>
+                </div>
+                <div class="text-2xl font-bold">
+                  {@oban_stats.total}
+                  <span class="text-sm font-normal text-base-content/60 ml-1">jobs</span>
+                </div>
+                <div class="text-xs text-base-content/60 mt-2 space-y-1">
+                  <div class="flex justify-between">
+                    <span>Executing</span>
+                    <span class="font-mono">{@oban_stats.executing}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Available</span>
+                    <span class="font-mono">{@oban_stats.available}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Scheduled</span>
+                    <span class="font-mono">{@oban_stats.scheduled}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Retryable</span>
+                    <span class={["font-mono", @oban_stats.retryable > 0 && "text-warning"]}>
+                      {@oban_stats.retryable}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <%!-- 12. Payments --%>
               <div class="card bg-base-100 p-4">
                 <div class="flex items-center justify-between mb-2">
@@ -656,7 +693,8 @@ defmodule GameServerWeb.AdminLive.Index do
       users_active_1d: Task.async(fn -> Accounts.count_users_active_since(1) end),
       users_active_7d: Task.async(fn -> Accounts.count_users_active_since(7) end),
       users_active_30d: Task.async(fn -> Accounts.count_users_active_since(30) end),
-      users_unactivated: Task.async(fn -> Accounts.count_unactivated_users() end)
+      users_unactivated: Task.async(fn -> Accounts.count_unactivated_users() end),
+      oban_stats: Task.async(fn -> safe_oban_stats() end)
     }
 
     # Await all tasks (the DB pool handles concurrency)
@@ -737,6 +775,7 @@ defmodule GameServerWeb.AdminLive.Index do
        users_active_7d: r.users_active_7d,
        users_active_30d: r.users_active_30d,
        users_unactivated: r.users_unactivated,
+       oban_stats: r.oban_stats,
        cache_stats: GameServer.Cache.Stats.snapshot(),
        dev_routes?: @dev_routes?
      )}
@@ -906,6 +945,25 @@ defmodule GameServerWeb.AdminLive.Index do
     GameServerWeb.AdminLogBuffer.count_recent_errors(3600)
   rescue
     _ -> 0
+  end
+
+  defp safe_oban_stats do
+    import Ecto.Query, only: [from: 2]
+
+    counts =
+      from(j in Oban.Job, group_by: j.state, select: {j.state, count(j.id)})
+      |> Repo.all()
+      |> Map.new()
+
+    %{
+      total: counts |> Map.values() |> Enum.sum(),
+      executing: Map.get(counts, "executing", 0),
+      available: Map.get(counts, "available", 0),
+      scheduled: Map.get(counts, "scheduled", 0),
+      retryable: Map.get(counts, "retryable", 0)
+    }
+  rescue
+    _ -> %{total: 0, executing: 0, available: 0, scheduled: 0, retryable: 0}
   end
 
   defp safe_lobby_snapshot_runs do

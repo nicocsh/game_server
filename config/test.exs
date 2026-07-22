@@ -35,7 +35,10 @@ else
     database: database_path,
     adapter: Ecto.Adapters.SQLite3,
     pool: Ecto.Adapters.SQL.Sandbox,
-    pool_size: 1,
+    # 2, not 1: Oban runs a boot-time `verify_migrated!` query in test mode, and
+    # the host tree's periodic DB workers can hold the single connection long
+    # enough to starve it. The spare connection lets Oban boot.
+    pool_size: 2,
     pool_timeout: 10_000,
     queue_target: 10_000,
     queue_interval: 1_000,
@@ -93,3 +96,8 @@ config :game_server_web, GameServerWeb.Plugs.RateLimiter, enabled: false
 # Background presence sweeping fights with sandbox ownership in tests and can
 # keep logging after the test task itself is done.
 config :game_server_core, GameServer.Accounts.StalePresenceSweeper, enabled: false
+
+# Jobs run inline on demand in tests (no queues/plugins/cron); assert with
+# Oban.Testing helpers and drain explicitly. Keeps the Cron tick from firing
+# against the Sandbox.
+config :game_server_core, Oban, testing: :manual

@@ -3,9 +3,14 @@ defmodule GameServerWeb.Router.Shared do
 
   @browser_csp "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss:; font-src 'self' data:; frame-src 'self' blob:; frame-ancestors 'self'"
   @swagger_csp "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' wss:; font-src 'self' data:; frame-src 'self' blob:; frame-ancestors 'self'"
+  # Oban Web serves its own JS/CSS from 'self' but its root layout emits a
+  # nonce'd inline <script>, which the strict browser CSP would block. This
+  # scoped policy (admin-only /admin/oban) allows it, mirroring :swagger_browser.
+  @oban_csp "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:; font-src 'self' data:; frame-ancestors 'self'"
 
   def browser_headers, do: %{"content-security-policy" => @browser_csp}
   def swagger_headers, do: %{"content-security-policy" => @swagger_csp}
+  def oban_headers, do: %{"content-security-policy" => @oban_csp}
 
   def require_admin_on_mount do
     [
@@ -87,6 +92,16 @@ defmodule GameServerWeb.Router.Shared do
         plug :put_root_layout, html: {GameServerWeb.Layouts, :root}
         plug :protect_from_forgery
         plug :put_secure_browser_headers, RouterShared.swagger_headers()
+        plug :fetch_current_scope_for_user
+      end
+
+      pipeline :oban_browser do
+        plug :accepts, ["html"]
+        plug :fetch_session
+        plug :fetch_live_flash
+        plug :put_root_layout, html: {GameServerWeb.Layouts, :root}
+        plug :protect_from_forgery
+        plug :put_secure_browser_headers, RouterShared.oban_headers()
         plug :fetch_current_scope_for_user
       end
 
@@ -548,6 +563,15 @@ defmodule GameServerWeb.Router.Shared do
         pipe_through [:browser, :require_admin_user]
 
         live_dashboard "/admin/dashboard", metrics: GameServerWeb.Telemetry
+      end
+
+      scope "/" do
+        # Oban Web needs its own (scoped) CSP for its inline script. Gated on the
+        # socket too, not just the HTTP request — our on_mount runs before Oban
+        # Web's own Authentication.
+        pipe_through [:oban_browser, :require_admin_user]
+
+        oban_dashboard("/admin/oban", on_mount: [{GameServerWeb.UserAuth, :require_admin}])
       end
 
       scope "/" do

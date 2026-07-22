@@ -55,7 +55,10 @@ defmodule GameServerCore.MixProject do
       {:ueberauth_steam_strategy, "~> 0.1.6"},
       {:jose, "~> 1.11"},
       {:guardian, "~> 2.3"},
-      {:quantum, "~> 3.5"},
+      {:oban, "~> 2.19"},
+      # crontab was pulled in transitively by quantum; the Schedule tick worker
+      # still parses/matches cron expressions with it.
+      {:crontab, "~> 1.1"},
       {:corsica, "~> 2.0"},
       {:mdex, "~> 0.13"},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},

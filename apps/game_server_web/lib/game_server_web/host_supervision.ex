@@ -38,15 +38,16 @@ defmodule GameServerWeb.HostSupervision do
   @doc """
   Set up the ETS tables and OS services children assume already exist.
 
-  Must run before `children/1` is supervised: `Schedule.Scheduler` reads the
-  table `GameServer.Schedule.start_link/0` creates, and the ban/geo plugs read
-  theirs on the first request. Safe to call more than once.
+  Must run before `children/1` is supervised: the Schedule tick reads the
+  registry `GameServer.Schedule.start_link/0` creates, and the ban/geo plugs
+  read theirs on the first request. Safe to call more than once.
   """
   @spec init_runtime() :: :ok
   def init_runtime do
     Application.start(:os_mon)
 
-    # ETS owner for Schedule callbacks — must exist before Scheduler starts.
+    # ETS owner for the Schedule registry + protected-callback set — must exist
+    # before the Oban Cron tick fires.
     GameServer.Schedule.start_link()
     IpBan.init_table()
     GeoCountry.init_table()
@@ -106,8 +107,9 @@ defmodule GameServerWeb.HostSupervision do
         GameServer.Retention,
         # Tournament lifecycle: transitions, draws, match deadlines, recurrence
         GameServer.Tournaments.Ticker,
-        # Quantum scheduler for cron-like jobs
-        GameServer.Schedule.Scheduler,
+        # Durable background jobs (GameServer.Jobs) + the per-minute Cron tick
+        # that drives GameServer.Schedule.
+        {Oban, GameServer.Jobs.oban_config()},
         # Worker that drives the matchmaking sweep
         GameServer.Matchmaking.Worker,
         # Buffers lobby snapshots/events and assigns seq. :global-registered, so

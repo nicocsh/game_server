@@ -1,5 +1,9 @@
 # July 2026
 
+- [added] **Background jobs** — `GameServer.Jobs` for durable, retryable, delayed hook execution (Oban).
+- [changed] Scheduled jobs are now durable and distributed-safe via job uniqueness.
+- [breaking] Scheduled-callback context is a string-keyed JSON map.
+- [removed] Quantum and the `schedule_locks` table.
 - [added] **Lobby snapshots** — durable per-run record of lobby state, opt-in via `LOBBY_SNAPSHOTS_ENABLED`.
 - [added] **Matchmaking** (ticket queue), admin page and hooks.
 - [added] **Party matchmaking**, matched as one unit.

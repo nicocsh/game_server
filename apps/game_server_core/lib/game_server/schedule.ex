@@ -5,8 +5,9 @@ defmodule GameServer.Schedule do
   Use this module in your `after_startup/0` hook to register scheduled jobs
   that will call your hook functions at specified intervals.
 
-  This module is safe for distributed deployments - only one instance will
-  execute each job per period using database locks.
+  Jobs are durable and safe for distributed deployments: they run through the
+  background job queue (`GameServer.Jobs`, backed by Oban), so exactly one
+  instance executes each job per period and a crash mid-run is retried.
 
   Scheduled callbacks are automatically protected from user RPC calls.
 
@@ -28,77 +29,44 @@ defmodule GameServer.Schedule do
         :ok
       end
 
-      # Callback receives context map (public function, but protected from RPC)
+      # Callback receives a context map (public function, but protected from RPC)
       def on_hourly(context) do
-        IO.puts("Triggered at \#{context.triggered_at}")
+        IO.puts("Triggered at \#{context["triggered_at"]}")
         :ok
       end
 
   ## Context
 
-  All callbacks receive a context map:
+  Callbacks run as background jobs, so the context is a **JSON map with string
+  keys** (`triggered_at` is an ISO8601 string):
 
       %{
-        triggered_at: ~U[2025-12-03 14:00:00Z],
-        job_name: :on_hourly,
-        schedule: "0 * * * *"
+        "triggered_at" => "2026-07-22T14:00:00Z",
+        "job_name" => "on_hourly",
+        "schedule" => "0 * * * *"
       }
 
   ## Distributed Safety
 
-  When running multiple instances, only one will execute each job per period.
-  This is achieved via database locks in the `schedule_locks` table.
-  Old locks are automatically cleaned up after 7 days.
+  A single per-minute tick (`GameServer.Schedule.TickWorker`, driven by Oban's
+  leader-elected Cron plugin) enqueues each due callback as a **unique** job.
+  Oban's uniqueness guarantees a callback runs at most once per period across
+  the whole cluster — no application-level locks required.
   """
 
-  import Ecto.Query
-  alias Crontab.CronExpression.Composer
   alias Crontab.CronExpression.Parser
-  alias GameServer.Repo
-  alias GameServer.Schedule.Lock
-  alias GameServer.Schedule.Scheduler
+  alias Crontab.DateChecker
+  alias GameServer.Jobs
+  alias GameServer.Jobs.HookWorker
+  alias GameServer.Jobs.ProtectedCallbacks
   require Logger
 
-  # ETS table to track registered scheduled callbacks
-  @callbacks_table :schedule_callbacks
+  # ETS table of registered schedules: {job_name, cron_expr, hook_fn}
+  @table :schedule_jobs
 
-  @doc false
-  @spec start_link() :: :ignore
-  def start_link do
-    # Create ETS table to track registered callbacks
-    # Format: {job_name, hook_fn}
-    :ets.new(@callbacks_table, [:set, :public, :named_table])
-    :ignore
-  end
-
-  @doc """
-  Returns the set of callback function names registered for scheduled jobs.
-
-  These are protected from user RPC calls via `Hooks.call/3`.
-  """
-  @spec registered_callbacks() :: MapSet.t(atom())
-  def registered_callbacks do
-    if :ets.whereis(@callbacks_table) != :undefined do
-      @callbacks_table
-      |> :ets.tab2list()
-      |> Enum.map(fn {_name, hook_fn} -> hook_fn end)
-      |> MapSet.new()
-    else
-      MapSet.new()
-    end
-  end
-
-  defp register_callback(name, hook_fn) do
-    if :ets.whereis(@callbacks_table) != :undefined do
-      :ets.insert(@callbacks_table, {name, hook_fn})
-    end
-  end
-
-  defp unregister_callback(name) do
-    if :ets.whereis(@callbacks_table) != :undefined do
-      :ets.delete(@callbacks_table, name)
-    end
-  end
+  # Uniqueness window (seconds) for a per-minute tick — comfortably longer than
+  # a minute so a duplicate tick near the boundary can't double-enqueue.
+  @unique_period 90
 
   @day_map %{
     sunday: 0,
@@ -109,6 +77,35 @@ defmodule GameServer.Schedule do
     friday: 5,
     saturday: 6
   }
+
+  @doc false
+  @spec start_link() :: :ignore
+  def start_link do
+    if :ets.whereis(@table) == :undefined do
+      :ets.new(@table, [:set, :public, :named_table, read_concurrency: true])
+    end
+
+    ProtectedCallbacks.init()
+    :ignore
+  end
+
+  @doc """
+  Returns the set of callback function names registered for background jobs.
+
+  The union of hook functions bound to an active schedule and any hook enqueued
+  via `GameServer.Jobs`. These are protected from user RPC calls via
+  `Hooks.call/3`. Cancelling a schedule drops its callback from the set unless
+  another schedule (or a `Jobs` enqueue) still references it.
+  """
+  @spec registered_callbacks() :: MapSet.t(atom())
+  def registered_callbacks do
+    scheduled =
+      registry_entries()
+      |> Enum.map(fn {_name, _cron, hook_fn} -> hook_fn end)
+      |> MapSet.new()
+
+    MapSet.union(scheduled, ProtectedCallbacks.all())
+  end
 
   @doc """
   Register a job with full cron syntax.
@@ -121,15 +118,10 @@ defmodule GameServer.Schedule do
   @spec cron(atom(), String.t(), atom()) :: :ok | {:error, term()}
   def cron(name, cron_expr, hook_fn) when is_atom(name) and is_atom(hook_fn) do
     case Parser.parse(cron_expr) do
-      {:ok, schedule} ->
-        Scheduler.new_job()
-        |> Quantum.Job.set_name(name)
-        |> Quantum.Job.set_schedule(schedule)
-        |> Quantum.Job.set_task(fn -> invoke_hook(name, cron_expr, hook_fn) end)
-        |> Scheduler.add_job()
-
-        # Register callback so it's blocked from RPC
-        register_callback(name, hook_fn)
+      {:ok, _schedule} ->
+        if :ets.whereis(@table) != :undefined do
+          :ets.insert(@table, {name, cron_expr, hook_fn})
+        end
 
         Logger.info("[Schedule] Registered job #{name} with schedule #{cron_expr}")
         :ok
@@ -230,8 +222,7 @@ defmodule GameServer.Schedule do
   """
   @spec cancel(atom()) :: :ok
   def cancel(name) when is_atom(name) do
-    Scheduler.delete_job(name)
-    unregister_callback(name)
+    if :ets.whereis(@table) != :undefined, do: :ets.delete(@table, name)
     Logger.info("[Schedule] Cancelled job #{name}")
     :ok
   end
@@ -241,124 +232,56 @@ defmodule GameServer.Schedule do
 
   Returns a list of job info maps.
   """
-  @spec list() :: [%{name: atom(), schedule: String.t(), state: term()}]
+  @spec list() :: [%{name: atom(), schedule: String.t(), hook: atom(), state: atom()}]
   def list do
-    Scheduler.jobs()
-    |> Enum.map(fn {name, job} ->
-      %{
-        name: name,
-        schedule: Composer.compose(job.schedule),
-        state: job.state
-      }
-    end)
-  end
-
-  @doc """
-  Clean up old schedule locks older than the specified number of days.
-
-  This is called automatically during job execution, but can also be
-  called manually if needed. Default is 7 days.
-
-  ## Examples
-
-      Schedule.cleanup_old_locks()
-      Schedule.cleanup_old_locks(days: 30)
-  """
-  @spec cleanup_old_locks() :: {:ok, non_neg_integer()}
-  @spec cleanup_old_locks(keyword()) :: {:ok, non_neg_integer()}
-  def cleanup_old_locks(opts \\ []) do
-    days = Keyword.get(opts, :days, 7)
-    cutoff = DateTime.utc_now() |> DateTime.add(-days * 24 * 60 * 60, :second)
-
-    {deleted, _} =
-      from(l in Lock, where: l.executed_at < ^cutoff)
-      |> Repo.delete_all()
-
-    if deleted > 0 do
-      Logger.info("[Schedule] Cleaned up #{deleted} old schedule locks")
-    end
-
-    {:ok, deleted}
-  end
-
-  # Invoke the hook function with context, using DB lock for distributed safety
-  defp invoke_hook(name, schedule, hook_fn) do
-    period_key = calculate_period_key(schedule)
-
-    # Occasionally clean up old locks (roughly once per day per instance)
-    maybe_cleanup_old_locks()
-
-    case acquire_lock(name, period_key) do
-      {:ok, _lock} ->
-        context = %{
-          triggered_at: DateTime.utc_now(),
-          job_name: name,
-          schedule: schedule
-        }
-
-        Logger.debug("[Schedule] Acquired lock, invoking hook #{hook_fn} for job #{name}")
-
-        try do
-          GameServer.Hooks.invoke(hook_fn, [context])
-        rescue
-          e ->
-            Logger.error(
-              "[Schedule] Error invoking hook #{hook_fn}: #{Exception.format(:error, e, __STACKTRACE__)}"
-            )
-        end
-
-      {:error, _} ->
-        Logger.debug(
-          "[Schedule] Skipping job #{name} - already executed for period #{period_key}"
-        )
-
-        :skipped
+    if :ets.whereis(@table) == :undefined do
+      []
+    else
+      @table
+      |> :ets.tab2list()
+      |> Enum.map(fn {name, cron_expr, hook_fn} ->
+        %{name: name, schedule: cron_expr, hook: hook_fn, state: :active}
+      end)
     end
   end
 
-  # Run cleanup roughly once per day (based on random chance)
-  defp maybe_cleanup_old_locks do
-    # 1 in 1440 chance (once per day if jobs run every minute)
-    if :rand.uniform(1440) == 1 do
-      GameServer.Async.run(fn -> cleanup_old_locks() end)
+  @doc false
+  # Called once per minute by `TickWorker`. Enqueues a unique job for each
+  # registered schedule whose cron matches `now` (to the minute).
+  @spec enqueue_due(DateTime.t()) :: :ok
+  def enqueue_due(now) do
+    minute = %{now | second: 0, microsecond: {0, 0}}
+    naive = DateTime.to_naive(minute)
+
+    for {name, cron_expr, hook_fn} <- registry_entries() do
+      with {:ok, cron} <- Parser.parse(cron_expr),
+           true <- DateChecker.matches_date?(cron, naive) do
+        enqueue_due_job(name, cron_expr, hook_fn, minute)
+      end
     end
+
+    :ok
   end
 
-  # Try to acquire a lock for this job + period combination
-  # Returns {:ok, lock} if we got the lock, {:error, changeset} if already taken
-  defp acquire_lock(job_name, period_key) do
-    %Lock{}
-    |> Lock.changeset(%{
-      job_name: to_string(job_name),
-      period_key: period_key,
-      executed_at: DateTime.utc_now()
-    })
-    |> Repo.insert()
+  defp registry_entries do
+    if :ets.whereis(@table) == :undefined, do: [], else: :ets.tab2list(@table)
   end
 
-  # Calculate a period key based on the cron schedule
-  # This determines the "bucket" for deduplication
-  defp calculate_period_key(schedule) do
-    now = DateTime.utc_now()
+  defp enqueue_due_job(name, cron_expr, hook_fn, minute) do
+    context = %{
+      "triggered_at" => DateTime.to_iso8601(minute),
+      "job_name" => Atom.to_string(name),
+      "schedule" => cron_expr
+    }
 
-    cond do
-      # Every N minutes (*/N * * * *)
-      String.starts_with?(schedule, "*/") ->
-        # Per-minute bucket
-        Calendar.strftime(now, "%Y-%m-%d-%H-%M")
-
-      # Hourly (N * * * *)
-      match?([_, "*", "*", "*", "*"], String.split(schedule, " ")) ->
-        Calendar.strftime(now, "%Y-%m-%d-%H")
-
-      # Daily (N N * * *)
-      match?([_, _, "*", "*", "*"], String.split(schedule, " ")) ->
-        Calendar.strftime(now, "%Y-%m-%d")
-
-      # Weekly or other patterns
-      true ->
-        # Default to daily bucket
-        Calendar.strftime(now, "%Y-%m-%d")
-    end
+    # The context (incl. the minute-bucketed timestamp) is identical for every
+    # tick in the same minute, so Oban's uniqueness dedupes duplicate ticks and
+    # collapses the fan-out to one run per period across the cluster.
+    Jobs.enqueue(
+      HookWorker,
+      Jobs.hook_job_args(hook_fn, context),
+      queue: :default,
+      unique: [period: @unique_period]
+    )
   end
 end

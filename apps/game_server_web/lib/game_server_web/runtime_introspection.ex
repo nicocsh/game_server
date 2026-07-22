@@ -13,7 +13,6 @@ defmodule GameServerWeb.RuntimeIntrospection do
   `:search` blob the LiveView filters on.
   """
 
-  alias Crontab.CronExpression.Composer
   alias Ecto.Adapters.SQL
   alias GameServer.Hooks.Declarations
   alias GameServer.Hooks.DynamicRpcs
@@ -23,7 +22,7 @@ defmodule GameServerWeb.RuntimeIntrospection do
   alias GameServer.Notifications.Types, as: NotificationTypes
   alias GameServer.Repo.AdvisoryLock
   alias GameServer.Repo.MigrationPaths
-  alias GameServer.Schedule.Scheduler
+  alias GameServer.Schedule
 
   # ── Compile-time sources ────────────────────────────────────────────────
   # Both files live at the repo root; when this app is consumed as a bare dep
@@ -762,42 +761,22 @@ defmodule GameServerWeb.RuntimeIntrospection do
 
   # ── Ops: jobs, locks, migrations ────────────────────────────────────────
 
-  @doc "Scheduled Quantum jobs (config-defined and plugin-registered)."
+  @doc "Plugin-registered scheduled jobs (see `GameServer.Schedule`)."
   def scheduled_jobs do
-    # A `rescue` would not help here: calling a dead GenServer exits rather
-    # than raising, so check the process instead.
-    if Process.whereis(Scheduler) == nil, do: [], else: job_rows()
-  end
-
-  defp job_rows do
-    Scheduler.jobs()
-    |> Enum.map(fn {name, job} ->
-      schedule = format_schedule(job.schedule)
-
+    Schedule.list()
+    |> Enum.map(fn %{name: name, schedule: schedule, hook: hook, state: state} ->
       %{
         id: to_string(name),
         name: to_string(name),
         schedule: schedule,
-        state: to_string(job.state),
-        timezone: to_string(job.timezone),
-        task: format_task(job.task),
-        search: String.downcase("#{name} #{schedule} #{job.state}")
+        state: to_string(state),
+        timezone: "UTC",
+        task: "#{hook}/1",
+        search: String.downcase("#{name} #{schedule} #{state}")
       }
     end)
     |> Enum.sort_by(& &1.name)
   end
-
-  # Composer only understands cron expressions; a job registered with a
-  # non-cron schedule falls back to its raw form rather than breaking the tab.
-  defp format_schedule(schedule) do
-    Composer.compose(schedule)
-  rescue
-    _ -> inspect(schedule)
-  end
-
-  defp format_task({mod, fun, args}), do: "#{inspect(mod)}.#{fun}/#{length(args)}"
-  defp format_task(fun) when is_function(fun), do: inspect(fun)
-  defp format_task(other), do: inspect(other)
 
   @doc "Advisory lock namespaces (from the registry the locks require)."
   def advisory_locks do

@@ -26,6 +26,7 @@ defmodule Mix.Tasks.Gen.Sdk do
     {GameServer.Notifications, "notifications.ex"},
     {GameServer.Chat, "chat.ex"},
     {GameServer.Schedule, "schedule.ex"},
+    {GameServer.Jobs, "jobs.ex"},
     {GameServer.KV, "kv.ex"},
     {GameServer.Lock, "lock.ex"},
     {GameServer.Tournaments, "tournaments.ex"}

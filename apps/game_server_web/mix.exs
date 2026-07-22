@@ -48,6 +48,7 @@ defmodule GameServerWeb.MixProject do
       {:phoenix_live_view, "~> 1.2.1"},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:phoenix_live_dashboard, "~> 0.8.3"},
+      {:oban_web, "~> 2.11"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
       # heroicons is intentionally NOT listed here.
@@ -75,7 +76,6 @@ defmodule GameServerWeb.MixProject do
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:guardian, "~> 2.3"},
       {:ueberauth_steam_strategy, "~> 0.1.6"},
-      {:quantum, "~> 3.5"},
       {:corsica, "~> 2.0"},
       {:hammer, "~> 7.2"},
       {:hammer_backend_redis, "~> 7.1"},

@@ -83,6 +83,19 @@ defmodule GameServerWeb.AdminPagesRenderTest do
     end
   end
 
+  describe "Oban Web dashboard (/admin/oban) is admin-gated" do
+    test "redirects unauthenticated users", %{conn: conn} do
+      assert {:error, {:redirect, _}} = live(conn, "/admin/oban")
+    end
+
+    test "redirects non-admin users", %{conn: conn} do
+      _first = AccountsFixtures.user_fixture()
+      user = AccountsFixtures.user_fixture()
+      assert user.is_admin == false
+      assert {:error, {:redirect, _}} = live(log_in_user(conn, user), "/admin/oban")
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Data-seeded render tests — catches struct field access errors in templates
   # ---------------------------------------------------------------------------

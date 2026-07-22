@@ -34,7 +34,7 @@ defmodule GameServerWeb.TestSupport.Runtime do
       GameServer.Lobbies.SpectatorTracker,
       GameServerWeb.AdminLogBuffer,
       PluginManager,
-      GameServer.Schedule.Scheduler
+      {Oban, GameServer.Jobs.oban_config()}
     ] ++ maybe_endpoint_child()
   end
 
@@ -77,8 +77,8 @@ defmodule GameServerWeb.TestSupport.Runtime do
   end
 
   defp ensure_schedule_table do
-    if :ets.whereis(:schedule_callbacks) == :undefined do
-      GameServer.Schedule.start_link()
-    end
+    # Idempotent: creates the Schedule registry + protected-callback tables if
+    # they don't exist yet.
+    GameServer.Schedule.start_link()
   end
 end
