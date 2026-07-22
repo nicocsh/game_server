@@ -1,0 +1,33 @@
+defmodule HandleWebRTC.MixProject do
+  use Mix.Project
+
+  def project do
+    [
+      app: :handle_webrtc,
+      version: "0.1.1",
+      elixir: "~> 1.20",
+      start_permanent: Mix.env() == :prod,
+      deps: deps()
+    ]
+  end
+
+  def application do
+    [
+      extra_applications: [:logger],
+      env: [hooks_module: GameServer.Modules.HandleWebRTCHook]
+    ]
+  end
+
+  # NOTE: This example lives inside the main server repo, so we depend on the
+  # in-repo SDK via a path dependency.
+  defp deps do
+    [
+      {:game_server_sdk, path: "../../../sdk", runtime: false, optional: true},
+      {:game_server_plugin_tools, path: "../../../sdk_tools", runtime: false},
+      {:bunt, "~> 1.0"},
+      {:phoenix, "~> 1.8.3"},
+      # Typed hook payloads (see proto/example_hook.proto).
+      #{:protobuf, "~> 0.17"}
+    ]
+  end
+end

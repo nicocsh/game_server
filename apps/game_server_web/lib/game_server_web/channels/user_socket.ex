@@ -23,7 +23,8 @@ defmodule GameServerWeb.UserSocket do
      "Global lobby list: created/updated/deleted, membership counts"},
     {"group:*", GameServerWeb.GroupChannel, "One group: state, members, join requests, chat"},
     {"groups", GameServerWeb.GroupsChannel, "Global group list: created/updated/deleted"},
-    {"party:*", GameServerWeb.PartyChannel, "One party: state, members, chat, disband"}
+    {"party:*", GameServerWeb.PartyChannel, "One party: state, members, chat, disband"},
+    {"signaling:*", GameServerWeb.SignalingChannel, "Signaling channel for WebRTC"}
   ]
 
   for {pattern, module, _description} <- @channels do
