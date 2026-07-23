@@ -17,6 +17,19 @@ defmodule GameServerWeb.Api.V1.EconomyController do
 
   @error_schema %Schema{type: :object, properties: %{error: %Schema{type: :string}}}
 
+  @ledger_entry_schema %Schema{
+    type: :object,
+    properties: %{
+      id: %Schema{type: :string, format: :uuid},
+      currency: %Schema{type: :string},
+      delta: %Schema{type: :integer},
+      balance_after: %Schema{type: :integer},
+      reason: %Schema{type: :string},
+      metadata: %Schema{type: :object},
+      inserted_at: %Schema{type: :string, format: :"date-time"}
+    }
+  }
+
   operation(:wallet,
     operation_id: "get_current_user_wallet",
     summary: "Current user's currency balances",
@@ -53,7 +66,10 @@ defmodule GameServerWeb.Api.V1.EconomyController do
         {"Ledger", "application/json",
          %Schema{
            type: :object,
-           properties: %{data: %Schema{type: :array}, meta: %Schema{type: :object}}
+           properties: %{
+             data: %Schema{type: :array, items: @ledger_entry_schema},
+             meta: %Schema{type: :object}
+           }
          }},
       unauthorized: {"Not authenticated", "application/json", @error_schema}
     ]

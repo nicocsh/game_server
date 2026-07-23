@@ -400,6 +400,23 @@ defmodule GameServerWeb.AdminLive.Users do
         <div class="modal modal-open">
           <div class="modal-box max-w-2xl">
             <h3 class="font-bold text-lg">Edit User</h3>
+
+            <%!-- Per-user drill-downs into the aggregate admin views, pre-filtered. --%>
+            <div class="flex flex-wrap gap-2 mt-1 mb-3">
+              <.link
+                navigate={~p"/admin/economy?user_id=#{@selected_user.id}"}
+                class="btn btn-xs btn-outline"
+              >
+                Wallet &amp; Items
+              </.link>
+              <.link
+                navigate={~p"/admin/kv?user_id=#{@selected_user.id}"}
+                class="btn btn-xs btn-outline"
+              >
+                KV Data
+              </.link>
+            </div>
+
             <.form for={@form} id="user-form" phx-submit="save_user">
               <.input field={@form[:email]} type="email" label="Email" />
               <.input field={@form[:display_name]} type="text" label="Display name" />

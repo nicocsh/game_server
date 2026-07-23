@@ -266,6 +266,31 @@ defmodule GameServerWeb.AdminLive.KV do
      |> reload_entries()}
   end
 
+  # Deep-link from the user admin page: `?user_id=` pre-filters entries to one user.
+  @impl true
+  def handle_params(%{"user_id" => user_id}, _uri, socket) when is_binary(user_id) do
+    trimmed = String.trim(user_id)
+
+    if trimmed == "" do
+      {:noreply, socket}
+    else
+      {:noreply,
+       socket
+       |> assign(:filter_user_id, trimmed)
+       |> assign(:page, 1)
+       |> assign(
+         :filter_form,
+         to_form(
+           %{"key" => "", "user_id" => trimmed, "lobby_id" => "", "global_only" => "false"},
+           as: :filters
+         )
+       )
+       |> reload_entries()}
+    end
+  end
+
+  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+
   @impl true
   def handle_event("kv_prev", _params, socket) do
     {:noreply, socket |> assign(:page, max(1, socket.assigns.page - 1)) |> reload_entries()}

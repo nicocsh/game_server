@@ -16,10 +16,12 @@ defmodule GameServerWeb.UserLive.Settings do
   alias GameServerWeb.UserLive.Settings.DataTab
   alias GameServerWeb.UserLive.Settings.FriendsTab
   alias GameServerWeb.UserLive.Settings.GroupsTab
+  alias GameServerWeb.UserLive.Settings.ItemsTab
   alias GameServerWeb.UserLive.Settings.PaymentsTab
   alias GameServerWeb.UserLive.Settings.Shared
+  alias GameServerWeb.UserLive.Settings.WalletTab
 
-  @valid_tabs ~w(account friends groups payments data)
+  @valid_tabs ~w(account friends groups wallet items payments data)
 
   @account_events ~w(validate_email update_email validate_display_name update_display_name
                      validate_username update_username
@@ -30,6 +32,8 @@ defmodule GameServerWeb.UserLive.Settings do
                      incoming_prev incoming_next outgoing_prev outgoing_next friends_prev
                      friends_next blocked_prev blocked_next)
   @payments_events ~w(cancel_stripe_subscription)
+  @wallet_events ~w(wallet_ledger_prev wallet_ledger_next)
+  @items_events ~w(items_prev items_next)
   @data_events ~w(kv_prev kv_next kv_filters_change kv_filters_apply kv_filters_clear)
   @groups_events ~w(groups_tab groups_toggle_create group_validate_create group_create
                     group_leave group_join group_request_join group_accept_invite
@@ -84,6 +88,8 @@ defmodule GameServerWeb.UserLive.Settings do
               {"account", gettext("Account")},
               {"friends", gettext("Friends")},
               {"groups", gettext("Groups")},
+              {"wallet", gettext("Wallet")},
+              {"items", gettext("Items")},
               {"payments", gettext("Payments")},
               {"data", gettext("Data")}
             ]
@@ -105,6 +111,8 @@ defmodule GameServerWeb.UserLive.Settings do
       <AccountTab.tab {tab_assigns(assigns)} />
       <FriendsTab.tab {tab_assigns(assigns)} />
       <PaymentsTab.tab {tab_assigns(assigns)} />
+      <WalletTab.tab {tab_assigns(assigns)} />
+      <ItemsTab.tab {tab_assigns(assigns)} />
       <DataTab.tab {tab_assigns(assigns)} />
       <GroupsTab.tab {tab_assigns(assigns)} />
     </Layouts.app>
@@ -142,6 +150,8 @@ defmodule GameServerWeb.UserLive.Settings do
       |> AccountTab.assign_defaults(user)
       |> FriendsTab.assign_defaults(user)
       |> DataTab.assign_defaults()
+      |> WalletTab.assign_defaults()
+      |> ItemsTab.assign_defaults()
       |> GroupsTab.assign_defaults()
       |> PaymentsTab.assign_payment_data()
 
@@ -167,6 +177,12 @@ defmodule GameServerWeb.UserLive.Settings do
 
   def handle_event(event, params, socket) when event in @payments_events,
     do: PaymentsTab.handle_event(event, params, socket)
+
+  def handle_event(event, params, socket) when event in @wallet_events,
+    do: WalletTab.handle_event(event, params, socket)
+
+  def handle_event(event, params, socket) when event in @items_events,
+    do: ItemsTab.handle_event(event, params, socket)
 
   def handle_event(event, params, socket) when event in @data_events,
     do: DataTab.handle_event(event, params, socket)
@@ -265,6 +281,8 @@ defmodule GameServerWeb.UserLive.Settings do
     do: FriendsTab.refresh_friend_lists(socket, Shared.current_user(socket))
 
   defp refresh_streams_for_tab(socket, "data"), do: DataTab.reload_kv_entries(socket)
+  defp refresh_streams_for_tab(socket, "wallet"), do: WalletTab.load_wallet(socket)
+  defp refresh_streams_for_tab(socket, "items"), do: ItemsTab.reload_items(socket)
   defp refresh_streams_for_tab(socket, "groups"), do: GroupsTab.reload_groups(socket)
   defp refresh_streams_for_tab(socket, _tab), do: socket
 end

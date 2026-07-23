@@ -229,7 +229,7 @@ vars above, mirroring the `STORAGE_ADAPTER` case block. Each provider's
 ## "Update everywhere we mention features" — concrete file list
 
 - **README.md** — Features: add **Push notifications**.
-- **CHANGELOG.md** — `[added]` Push notifications (FCM + APNs) · `[added]`
+- **CHANGELOG.md** — `[added]` Push notifications (FCM + APNs); `[added]`
   Push-token storage.
 - **.env.example** — all `PUSH_*` / `PUSH_FCM_*` / `APNS_*` vars +
   `LIMIT_MAX_PUSH_*`.

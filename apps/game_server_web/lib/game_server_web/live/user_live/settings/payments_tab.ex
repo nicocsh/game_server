@@ -31,9 +31,6 @@ defmodule GameServerWeb.UserLive.Settings.PaymentsTab do
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <div class="font-semibold text-lg">{gettext("Payments")}</div>
-            <div class="text-sm text-base-content/70">
-              {gettext("Purchases, owned items, and downloads.")}
-            </div>
           </div>
           <.link navigate={~p"/store"} class="btn btn-sm btn-primary">
             {gettext("Open Store")}
@@ -44,14 +41,11 @@ defmodule GameServerWeb.UserLive.Settings.PaymentsTab do
       <div class="card bg-base-200 p-4 rounded-lg">
         <div>
           <div class="font-semibold text-lg">{gettext("Purchases")}</div>
-          <div class="text-sm text-base-content/70">
-            {gettext("Orders, payment providers, and fulfillment status.")}
-          </div>
         </div>
 
         <%= if @payment_purchases == [] do %>
           <div class="mt-4 rounded-lg border border-base-300 bg-base-100 p-4 text-sm text-base-content/70">
-            {gettext("No purchases yet.")}
+            {gettext("No results.")}
           </div>
         <% else %>
           <div class="overflow-x-auto mt-4">
@@ -100,14 +94,11 @@ defmodule GameServerWeb.UserLive.Settings.PaymentsTab do
       <div class="card bg-base-200 p-4 rounded-lg">
         <div>
           <div class="font-semibold text-lg">{gettext("Owned")}</div>
-          <div class="text-sm text-base-content/70">
-            {gettext("Active entitlements and downloadable purchases.")}
-          </div>
         </div>
 
         <%= if @payment_entitlements == [] do %>
           <div class="mt-4 rounded-lg border border-base-300 bg-base-100 p-4 text-sm text-base-content/70">
-            {gettext("No active entitlements.")}
+            {gettext("No results.")}
           </div>
         <% else %>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">

@@ -133,7 +133,7 @@ keep working.
 ## "Update everywhere" — file list
 
 - **README** Features: Quests/progression (mention achievements are now a quest
-  kind). **CHANGELOG** `[added]` Quests/progression · `[changed]`/`[breaking]`
+  kind). **CHANGELOG** `[added]` Quests/progression; `[changed]`/`[breaking]`
   achievements folded into quests.
 - **.env.example** — the `LIMIT_*` caps.
 - **host_public_docs/** — new Quests page (kinds, objectives, `report_event`,

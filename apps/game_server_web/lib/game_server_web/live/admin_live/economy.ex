@@ -24,6 +24,27 @@ defmodule GameServerWeb.AdminLive.Economy do
     {:ok, socket}
   end
 
+  # Deep-link from the user admin page: `?user_id=` pre-filters the wallet/ledger/
+  # inventory lists to one user and pre-fills the grant/spend forms with them.
+  @impl true
+  def handle_params(%{"user_id" => user_id}, _uri, socket) when is_binary(user_id) do
+    trimmed = String.trim(user_id)
+
+    if trimmed == "" do
+      {:noreply, socket}
+    else
+      {:noreply,
+       socket
+       |> assign(:user_filter, trimmed)
+       |> assign(:page, 1)
+       |> assign(:form, Map.put(socket.assigns.form, "user_id", trimmed))
+       |> assign(:item_form, Map.put(socket.assigns.item_form, "user_id", trimmed))
+       |> reload()}
+    end
+  end
+
+  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+
   @impl true
   def handle_event("filter", params, socket) do
     {:noreply,

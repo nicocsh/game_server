@@ -57,8 +57,19 @@ defmodule GameServer.StorageTest do
 
   test "path traversal in a key cannot escape the storage root" do
     # A crafted key with .. segments resolves inside the root, not above it.
-    assert {:ok, _} = Storage.put("avatars/../../etc/passwd", "x", [])
+    key = "avatars/../../etc/passwd"
+    assert {:ok, _} = Storage.put(key, "x", [])
     root = Application.get_env(:game_server_core, GameServer.Storage.Local)[:dir]
-    refute File.exists?(Path.join(root, "../../etc/passwd"))
+
+    # Where an unsanitized join would have landed (above the root) must stay empty.
+    # (Constructed from the key so it doesn't accidentally probe a real system
+    # file like /etc/passwd, which exists whenever the root is only two dirs deep.)
+    escaped = Path.expand(Path.join(root, key))
+    refute String.starts_with?(escaped, Path.expand(root) <> "/")
+    refute File.exists?(escaped)
+
+    # The bytes are retrievable, and live under the sanitized key inside the root.
+    assert {:ok, "x"} = Storage.get(key)
+    assert File.exists?(Path.join(root, "avatars/etc/passwd"))
   end
 end

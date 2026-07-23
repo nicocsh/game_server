@@ -145,7 +145,7 @@ and pushed live when it changes.
 ## "Update everywhere" — file list
 
 - **README** Features: Webhooks + Remote config. **CHANGELOG** `[added]`
-  Signed retried webhooks · `[added]` Remote config.
+  Signed retried webhooks; `[added]` Remote config.
 - **.env.example** — the `LIMIT_*` caps (queue size already in Oban config).
 - **host_public_docs/** — new **Webhooks** page (event catalog, signature
   verification recipe, retry semantics) + **Remote config** page (fetch,

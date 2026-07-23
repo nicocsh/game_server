@@ -26,9 +26,17 @@ defmodule GameServerWeb.HostLayoutNavigationTest do
 
   test "per-item color class is applied to the icon" do
     html =
-      render_component(&HostLayoutNavigation.desktop_nav/1, base_assigns([
-        %{"label" => "Shop", "href" => "/shop", "icon" => "hero-star", "color" => "text-warning"}
-      ]))
+      render_component(
+        &HostLayoutNavigation.desktop_nav/1,
+        base_assigns([
+          %{
+            "label" => "Shop",
+            "href" => "/shop",
+            "icon" => "hero-star",
+            "color" => "text-warning"
+          }
+        ])
+      )
 
     assert html =~ "text-warning"
     assert html =~ "hero-star"
@@ -36,9 +44,12 @@ defmodule GameServerWeb.HostLayoutNavigationTest do
 
   test "{Module.func} label tokens resolve via the named function" do
     html =
-      render_component(&HostLayoutNavigation.desktop_nav/1, base_assigns([
-        %{"label" => "{GameServerWeb.NavTestProvider.coins}", "href" => "/shop"}
-      ]))
+      render_component(
+        &HostLayoutNavigation.desktop_nav/1,
+        base_assigns([
+          %{"label" => "{GameServerWeb.NavTestProvider.coins}", "href" => "/shop"}
+        ])
+      )
 
     assert html =~ "1234"
     refute html =~ "{GameServerWeb.NavTestProvider"
@@ -46,10 +57,13 @@ defmodule GameServerWeb.HostLayoutNavigationTest do
 
   test "unknown or failing tokens render empty, never crash" do
     html =
-      render_component(&HostLayoutNavigation.desktop_nav/1, base_assigns([
-        %{"label" => "{Does.Not.Exist}", "href" => "/a"},
-        %{"label" => "{GameServerWeb.NavTestProvider.boom}", "href" => "/b"}
-      ]))
+      render_component(
+        &HostLayoutNavigation.desktop_nav/1,
+        base_assigns([
+          %{"label" => "{Does.Not.Exist}", "href" => "/a"},
+          %{"label" => "{GameServerWeb.NavTestProvider.boom}", "href" => "/b"}
+        ])
+      )
 
     refute html =~ "Does.Not.Exist"
     refute html =~ "boom"
@@ -57,14 +71,17 @@ defmodule GameServerWeb.HostLayoutNavigationTest do
 
   test "readonly items render as a non-link badge (no href, not clickable)" do
     html =
-      render_component(&HostLayoutNavigation.desktop_nav/1, base_assigns([
-        %{
-          "label" => "{GameServerWeb.NavTestProvider.coins}",
-          "icon" => "hero-star",
-          "color" => "text-warning",
-          "readonly" => true
-        }
-      ]))
+      render_component(
+        &HostLayoutNavigation.desktop_nav/1,
+        base_assigns([
+          %{
+            "label" => "{GameServerWeb.NavTestProvider.coins}",
+            "icon" => "hero-star",
+            "color" => "text-warning",
+            "readonly" => true
+          }
+        ])
+      )
 
     assert html =~ "1234"
     assert html =~ "text-warning"
@@ -92,9 +109,12 @@ defmodule GameServerWeb.HostLayoutNavigationTest do
 
   test "mobile hamburger is a <details> toggle (native open/close, focus-independent)" do
     html =
-      render_component(&HostLayoutNavigation.mobile_nav/1, base_assigns([
-        %{"label" => "Play", "href" => "/play"}
-      ]))
+      render_component(
+        &HostLayoutNavigation.mobile_nav/1,
+        base_assigns([
+          %{"label" => "Play", "href" => "/play"}
+        ])
+      )
 
     # A <details data-navbar-dropdown> with a <summary> trigger — not a
     # tabindex/focus dropdown (which gets stuck when focus is lost on alt-tab).
@@ -106,10 +126,13 @@ defmodule GameServerWeb.HostLayoutNavigationTest do
 
   test "mobile: pinned items render inline (outside the dropdown menu)" do
     html =
-      render_component(&HostLayoutNavigation.mobile_nav/1, base_assigns([
-        %{"label" => "Coins", "href" => "/shop", "icon" => "hero-star", "mobile" => "pinned"},
-        %{"label" => "Play", "href" => "/play"}
-      ]))
+      render_component(
+        &HostLayoutNavigation.mobile_nav/1,
+        base_assigns([
+          %{"label" => "Coins", "href" => "/shop", "icon" => "hero-star", "mobile" => "pinned"},
+          %{"label" => "Play", "href" => "/play"}
+        ])
+      )
 
     # Pinned link is present, and it sits before the dropdown menu markup.
     assert html =~ ~s(href="/shop")
