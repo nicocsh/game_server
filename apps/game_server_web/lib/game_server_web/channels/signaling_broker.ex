@@ -214,9 +214,9 @@ defmodule GameServerWeb.SignalingBroker do
             Logger.warning("SignalingBroker: leave failed peer_not_found room=#{room_id} peer=#{peer_id}")
             {:reply, {:error, :peer_not_found}, state}
 
-          {_peer, peers} ->
+          {peer, peers} ->
             peer_count = map_size(peers)
-            Logger.info("SignalingBroker: peer leaving room=#{room_id} peer=#{peer_id} user=#{_peer.user_id} role=#{_peer.role} remaining_peers=#{peer_count}")
+            Logger.info("SignalingBroker: peer leaving room=#{room_id} peer=#{peer_id} user=#{peer.user_id} role=#{peer.role} remaining_peers=#{peer_count}")
 
             for {other_id, %{pid: other_pid}} <- peers do
               send(other_pid, {:signaling_relay, :peer_left, peer_id, %{peer_id: peer_id}})

@@ -52,7 +52,7 @@ defmodule GameServerWeb.SignalingChannel do
 
   @impl true
   def join("signaling:" <> room_id, _payload, socket) do
-    user_id = socket.assigns.current_scope.user.id
+    user_id = socket.assigns.current_scope.user_id
 
     if is_nil(user_id) do
       Logger.warning("SignalingChannel: unauthorized join attempt room=#{room_id} missing user_id")
@@ -60,7 +60,7 @@ defmodule GameServerWeb.SignalingChannel do
     else
       user = GameServer.Accounts.get_user(user_id)
       is_host = SignalingBroker.is_host?(room_id, user_id)
-      Logger.warning(is_host)
+      #Logger.warning(is_host)
 
       if not is_host and (is_nil(user.lobby_id) or user.lobby_id != room_id) do
         Logger.warning("SignalingChannel: join rejected not_lobby_member room=#{room_id} user=#{user_id} user_lobby=#{user.lobby_id || "nil"}")
@@ -205,7 +205,7 @@ defmodule GameServerWeb.SignalingChannel do
   end
 
   @impl true
-  def handle_in(event, payload, socket) do
+  def handle_in(event, _payload, socket) do
     Logger.warning("SignalingChannel: unknown event=#{event} room=#{socket.assigns[:signaling_room] || "nil"} peer=#{socket.assigns[:signaling_peer_id] || "nil"}")
     {:reply, {:error, %{error: "unknown_event"}}, socket}
   end
@@ -268,7 +268,7 @@ defmodule GameServerWeb.SignalingChannel do
     config = Application.get_env(:game_server_web, GameServerWeb.Plugs.RateLimiter, [])
 
     if Keyword.get(config, :enabled, true) do
-      user_id = socket.assigns.current_scope.user.id
+      user_id = socket.assigns.current_scope.user_id
       limit = Keyword.get(config, :signaling_ws_limit, @default_ws_rate_limit)
       window = Keyword.get(config, :signaling_ws_window, @default_ws_rate_window)
 
@@ -289,7 +289,7 @@ defmodule GameServerWeb.SignalingChannel do
     config = Application.get_env(:game_server_web, GameServerWeb.Plugs.RateLimiter, [])
 
     if Keyword.get(config, :enabled, true) do
-      user_id = socket.assigns.current_scope.user.id
+      user_id = socket.assigns.current_scope.user_id
       limit = Keyword.get(config, :signaling_ice_limit, @default_ice_rate_limit)
       window = Keyword.get(config, :signaling_ice_window, @default_ice_rate_window)
 
