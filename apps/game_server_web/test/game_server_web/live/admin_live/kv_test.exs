@@ -67,6 +67,25 @@ defmodule GameServerWeb.AdminLive.KVTest do
     refute has_element?(lv, "#admin-kv-#{e1.id}")
   end
 
+  test "admin kv deep-links to a user via ?user_id=", %{conn: conn} do
+    admin = AccountsFixtures.user_fixture()
+
+    {:ok, admin} =
+      admin |> User.admin_changeset(%{"is_admin" => true}) |> Repo.update()
+
+    u1 = AccountsFixtures.user_fixture()
+    u2 = AccountsFixtures.user_fixture()
+
+    {:ok, e1} = KV.put("dl:key:a", %{v: 1}, %{"m" => "a"}, user_id: u1.id)
+    {:ok, e2} = KV.put("dl:key:b", %{v: 2}, %{"m" => "b"}, user_id: u2.id)
+
+    {:ok, lv, _html} =
+      conn |> log_in_user(admin) |> live(~p"/admin/kv?user_id=#{u1.id}")
+
+    assert has_element?(lv, "#admin-kv-#{e1.id}")
+    refute has_element?(lv, "#admin-kv-#{e2.id}")
+  end
+
   test "admin creating a duplicate key does not crash", %{conn: conn} do
     admin = AccountsFixtures.user_fixture()
 

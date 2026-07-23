@@ -478,7 +478,7 @@ defmodule GameServerWeb.TournamentsLive do
     </div>
 
     <div :if={@groups == []} class="text-center py-12 text-base-content/60">
-      <p>{gettext("No tournaments yet.")}</p>
+      <p>{gettext("No results.")}</p>
     </div>
 
     <div class="mt-6 flex justify-center">
@@ -690,8 +690,7 @@ defmodule GameServerWeb.TournamentsLive do
         </div>
 
         <div :if={@entries == []} class="text-center py-8 text-base-content/60">
-          <p :if={@search == ""}>{gettext("No players registered yet.")}</p>
-          <p :if={@search != "" or @state_filter != "all"}>{gettext("No results.")}</p>
+          <p>{gettext("No results.")}</p>
         </div>
 
         <div :if={@players_pages > 1} class="mt-4 flex justify-center">

@@ -481,7 +481,10 @@ defmodule GameServerWeb.HostLayoutNavigation do
         if readonly?(link) do
           "inline-flex items-center gap-1 px-2 pointer-events-none cursor-default"
         else
-          ["btn btn-ghost btn-sm gap-1 px-2", if(entry_active?(link, @current_path), do: "btn-active")]
+          [
+            "btn btn-ghost btn-sm gap-1 px-2",
+            if(entry_active?(link, @current_path), do: "btn-active")
+          ]
         end
       }
     >
@@ -537,13 +540,19 @@ defmodule GameServerWeb.HostLayoutNavigation do
         </summary>
         <ul class="pl-4 mt-1 w-full">
           <li class="w-full">
-            <a href={~p"/users/settings"} class={["btn w-full", account_item_class(@current_path, "/users/settings")]}>
+            <a
+              href={~p"/users/settings"}
+              class={["btn w-full", account_item_class(@current_path, "/users/settings")]}
+            >
               <.icon name="hero-user-circle-solid" class="w-4 h-4" />
               {GameServerWeb.HostLayouts.translate("Account")}
             </a>
           </li>
           <li class="w-full">
-            <a href={~p"/notifications"} class={["btn w-full", account_item_class(@current_path, "/notifications")]}>
+            <a
+              href={~p"/notifications"}
+              class={["btn w-full", account_item_class(@current_path, "/notifications")]}
+            >
               <.icon name="hero-bell-solid" class="w-4 h-4" />
               {GameServerWeb.HostLayouts.translate("Notifications")}
               <span
@@ -740,11 +749,18 @@ defmodule GameServerWeb.HostLayoutNavigation do
     auth_level = auth_level(Scope.user(scope))
 
     assign(assigns,
-      primary_links: section_entries(assigns.navigation, "primary_links", auth_level, "any", scope),
+      primary_links:
+        section_entries(assigns.navigation, "primary_links", auth_level, "any", scope),
       guest_links:
         section_entries(assigns.navigation, "guest_links", auth_level, "unauthenticated", scope),
       authenticated_links:
-        section_entries(assigns.navigation, "authenticated_links", auth_level, "authenticated", scope),
+        section_entries(
+          assigns.navigation,
+          "authenticated_links",
+          auth_level,
+          "authenticated",
+          scope
+        ),
       account_links:
         section_entries(assigns.navigation, "account_links", auth_level, "authenticated", scope)
     )
