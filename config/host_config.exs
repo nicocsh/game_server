@@ -62,6 +62,25 @@ config :game_server_core, GameServer.Repo,
   migration_primary_key: [name: :id, type: :binary_id],
   migration_foreign_key: [type: :binary_id]
 
+# Durable background jobs (GameServer.Jobs / GameServer.Schedule). The `:engine`
+# (Basic on Postgres, Lite on SQLite) is injected at runtime from the Repo's
+# actual adapter by GameServer.Jobs.oban_config/0 — so it stays correct when
+# dev/test switch the Repo to Postgres via POSTGRES_HOST. The single per-minute
+# Cron entry drives Schedule.TickWorker (see GameServer.Schedule).
+config :game_server_core, Oban,
+  repo: GameServer.Repo,
+  queues: [default: 10, hooks: 20, mailers: 5, storage: 5, webhooks: 10],
+  plugins: [
+    {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
+    {Oban.Plugins.Cron, crontab: [{"* * * * *", GameServer.Schedule.TickWorker}]}
+  ]
+
+# Object storage (GameServer.Storage). Defaults to local disk; STORAGE_ADAPTER
+# and the STORAGE_* vars (see config/host_runtime.exs) select and configure a
+# backend at runtime.
+config :game_server_core, GameServer.Storage, adapter: GameServer.Storage.Local
+config :ex_aws, json_codec: Jason
+
 host_root = Path.expand("..", __DIR__)
 host_theme_root = Path.join(host_root, "theme")
 web_dep_root = Mix.Project.deps_paths()[:game_server_web]

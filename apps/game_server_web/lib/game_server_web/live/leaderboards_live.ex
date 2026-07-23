@@ -8,6 +8,7 @@ defmodule GameServerWeb.LeaderboardsLive do
   """
   use GameServerWeb, :live_view
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Leaderboards
   alias GameServer.Leaderboards.Leaderboard
   alias GameServerWeb.Plugs.FeatureGate
@@ -115,7 +116,7 @@ defmodule GameServerWeb.LeaderboardsLive do
             records_count={@records_count}
             user_record={@user_record}
             records_search={@records_search}
-            current_user_id={@current_scope && @current_scope.user && @current_scope.user.id}
+            current_user_id={@current_scope && Scope.user(@current_scope) && @current_scope.user_id}
             locale={@locale}
           />
         <% else %>
@@ -471,7 +472,7 @@ defmodule GameServerWeb.LeaderboardsLive do
 
   defp get_user_record(socket, leaderboard_id) do
     case socket.assigns[:current_scope] do
-      %{user: %{id: user_id}} when is_binary(user_id) ->
+      %{user_id: user_id} when is_binary(user_id) ->
         case Leaderboards.get_user_record(leaderboard_id, user_id) do
           {:ok, record} -> record
           _ -> nil

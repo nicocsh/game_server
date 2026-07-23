@@ -3,9 +3,14 @@ defmodule GameServerWeb.Router.Shared do
 
   @browser_csp "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss:; font-src 'self' data:; frame-src 'self' blob:; frame-ancestors 'self'"
   @swagger_csp "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' wss:; font-src 'self' data:; frame-src 'self' blob:; frame-ancestors 'self'"
+  # Oban Web serves its own JS/CSS from 'self' but its root layout emits a
+  # nonce'd inline <script>, which the strict browser CSP would block. This
+  # scoped policy (admin-only /admin/oban) allows it, mirroring :swagger_browser.
+  @oban_csp "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:; font-src 'self' data:; frame-ancestors 'self'"
 
   def browser_headers, do: %{"content-security-policy" => @browser_csp}
   def swagger_headers, do: %{"content-security-policy" => @swagger_csp}
+  def oban_headers, do: %{"content-security-policy" => @oban_csp}
 
   def require_admin_on_mount do
     [
@@ -90,6 +95,16 @@ defmodule GameServerWeb.Router.Shared do
         plug :fetch_current_scope_for_user
       end
 
+      pipeline :oban_browser do
+        plug :accepts, ["html"]
+        plug :fetch_session
+        plug :fetch_live_flash
+        plug :put_root_layout, html: {GameServerWeb.Layouts, :root}
+        plug :protect_from_forgery
+        plug :put_secure_browser_headers, RouterShared.oban_headers()
+        plug :fetch_current_scope_for_user
+      end
+
       pipeline :openapi_gate do
         plug GameServerWeb.Plugs.FeatureGate, env: "OPENAPI_ENABLED", default: true
       end
@@ -133,6 +148,14 @@ defmodule GameServerWeb.Router.Shared do
         get "/privacy", PageController, :privacy
         get "/data-deletion", PageController, :data_deletion
         get "/terms", PageController, :terms
+      end
+
+      # Serve stored objects (local backend). With S3 the object URL points at the
+      # bucket and this route is unused.
+      scope "/", GameServerWeb.Api.V1, as: :api_v1 do
+        pipe_through :browser
+
+        get "/storage/*key", StorageController, :show
       end
     end
   end
@@ -333,6 +356,9 @@ defmodule GameServerWeb.Router.Shared do
         patch "/me/password", MeController, :update_password
         patch "/me/display_name", MeController, :update_display_name
         patch "/me/username", MeController, :update_username
+        post "/me/avatar/upload-url", MeController, :avatar_upload_url
+        post "/me/avatar", MeController, :set_avatar
+        put "/storage/upload", StorageController, :upload
         get "/payments/entitlements", PaymentController, :entitlements
         post "/payments/checkout/stripe", PaymentController, :stripe_checkout
         post "/payments/checkout/steam", PaymentController, :steam_checkout
@@ -498,6 +524,10 @@ defmodule GameServerWeb.Router.Shared do
         get "/sessions", SessionController, :index
         delete "/sessions/:id", SessionController, :delete
         delete "/users/:id/sessions", SessionController, :delete_user_sessions
+        get "/storage", StorageController, :index
+        delete "/storage", StorageController, :delete
+        put "/storage/object", StorageController, :upload
+        get "/storage/object", StorageController, :download
       end
     end
   end
@@ -548,6 +578,15 @@ defmodule GameServerWeb.Router.Shared do
         pipe_through [:browser, :require_admin_user]
 
         live_dashboard "/admin/dashboard", metrics: GameServerWeb.Telemetry
+      end
+
+      scope "/" do
+        # Oban Web needs its own (scoped) CSP for its inline script. Gated on the
+        # socket too, not just the HTTP request — our on_mount runs before Oban
+        # Web's own Authentication.
+        pipe_through [:oban_browser, :require_admin_user]
+
+        oban_dashboard("/admin/oban", on_mount: [{GameServerWeb.UserAuth, :require_admin}])
       end
 
       scope "/" do
@@ -609,6 +648,7 @@ defmodule GameServerWeb.Router.Shared do
           live "/admin/geo", AdminLive.Geo, :index
           live "/admin/system", AdminLive.System, :index
           live "/admin/runtime", AdminLive.Runtime, :index
+          live "/admin/storage", AdminLive.Storage, :index
         end
       end
     end

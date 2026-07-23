@@ -22,6 +22,15 @@ fi
 
 mkdir -p "$OUT_DIR"
 
+# Prune previously generated apis/models so a renamed or removed operation does
+# not leave an orphan file behind. The generator only writes/overwrites the
+# files for the current spec — it never deletes stale ones — so a renamed
+# operationId (e.g. tournaments gaining explicit ids) would otherwise leave the
+# old, now-unreferenced model class sitting there with a broken denormalize
+# reference the post-processing can't fix. These dirs are 100% generated; the
+# hand-maintained wrappers live in gamend_template, so clearing them is safe.
+rm -rf "$OUT_DIR/apis" "$OUT_DIR/models"
+
 # default generator output options
 GEN_IMAGE=${GEN_IMAGE:-openapitools/openapi-generator-cli}
 GENERATOR=${GENERATOR:-gdscript}

@@ -4,6 +4,7 @@ defmodule GameServerWeb.Api.V1.ChatController do
 
   import GameServerWeb.Helpers.ParamParser
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Chat
   alias GameServerWeb.Serializers
   alias OpenApiSpex.Schema
@@ -92,8 +93,8 @@ defmodule GameServerWeb.Api.V1.ChatController do
       "metadata" => params["metadata"] || %{}
     }
 
-    with :ok <- GameServerWeb.RateLimit.check_chat_daily(scope.user.id),
-         {:ok, message} <- Chat.send_message(scope, attrs) do
+    with :ok <- GameServerWeb.RateLimit.check_chat_daily(scope.user_id),
+         {:ok, message} <- Chat.send_message(%{user: Scope.user(scope)}, attrs) do
       conn |> put_status(:created) |> json(serialize_message(message))
     else
       {:error, :chat_daily_limit} ->
@@ -162,7 +163,7 @@ defmodule GameServerWeb.Api.V1.ChatController do
 
   def show(conn, %{"id" => id}) do
     message_id = parse_id(id)
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     case Chat.get_message(message_id) do
       nil ->
@@ -244,7 +245,7 @@ defmodule GameServerWeb.Api.V1.ChatController do
 
   def index(conn, params) do
     scope = conn.assigns[:current_scope]
-    user_id = scope.user.id
+    user_id = scope.user_id
     chat_type = params["chat_type"]
     chat_ref_id = parse_id(params["chat_ref_id"])
     page = parse_id(params["page"]) || 1
@@ -303,7 +304,7 @@ defmodule GameServerWeb.Api.V1.ChatController do
   )
 
   def mark_read(conn, params) do
-    user_id = conn.assigns[:current_scope].user.id
+    user_id = conn.assigns[:current_scope].user_id
     chat_type = params["chat_type"]
     chat_ref_id = parse_id(params["chat_ref_id"])
     message_id = parse_id(params["message_id"])
@@ -368,7 +369,7 @@ defmodule GameServerWeb.Api.V1.ChatController do
   )
 
   def unread(conn, params) do
-    user_id = conn.assigns[:current_scope].user.id
+    user_id = conn.assigns[:current_scope].user_id
     chat_type = params["chat_type"]
     chat_ref_id = parse_id(params["chat_ref_id"])
 
@@ -423,7 +424,7 @@ defmodule GameServerWeb.Api.V1.ChatController do
   )
 
   def update(conn, %{"id" => id} = params) do
-    user_id = conn.assigns[:current_scope].user.id
+    user_id = conn.assigns[:current_scope].user_id
     message_id = parse_id(id)
 
     attrs =
@@ -476,7 +477,7 @@ defmodule GameServerWeb.Api.V1.ChatController do
   )
 
   def delete(conn, %{"id" => id}) do
-    user_id = conn.assigns[:current_scope].user.id
+    user_id = conn.assigns[:current_scope].user_id
     message_id = parse_id(id)
 
     case Chat.delete_own_message(user_id, message_id) do

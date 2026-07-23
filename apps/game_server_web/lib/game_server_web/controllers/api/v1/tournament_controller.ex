@@ -2,6 +2,7 @@ defmodule GameServerWeb.Api.V1.TournamentController do
   use GameServerWeb, :controller
   use OpenApiSpex.ControllerSpecs
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Tournaments
   alias GameServer.Tournaments.Tournament
   alias OpenApiSpex.Schema
@@ -57,6 +58,7 @@ defmodule GameServerWeb.Api.V1.TournamentController do
   @error_schema %Schema{type: :object, properties: %{error: %Schema{type: :string}}}
 
   operation(:index,
+    operation_id: "list_tournaments",
     summary: "List tournaments",
     parameters: [
       state: [in: :query, schema: %Schema{type: :string}, description: "Filter by state"],
@@ -93,6 +95,7 @@ defmodule GameServerWeb.Api.V1.TournamentController do
   end
 
   operation(:show,
+    operation_id: "get_tournament",
     summary: "Tournament details (with the caller's participation when authenticated)",
     parameters: [id: [in: :path, schema: %Schema{type: :string}, required: true]],
     responses: [
@@ -125,6 +128,7 @@ defmodule GameServerWeb.Api.V1.TournamentController do
   end
 
   operation(:join,
+    operation_id: "join_tournament",
     summary: "Register as an entry leader",
     parameters: [id: [in: :path, schema: %Schema{type: :string}, required: true]],
     security: [%{"bearer" => []}],
@@ -145,6 +149,7 @@ defmodule GameServerWeb.Api.V1.TournamentController do
   end
 
   operation(:leave,
+    operation_id: "leave_tournament",
     summary: "Withdraw the caller's entry (before the draw)",
     parameters: [id: [in: :path, schema: %Schema{type: :string}, required: true]],
     security: [%{"bearer" => []}],
@@ -165,6 +170,7 @@ defmodule GameServerWeb.Api.V1.TournamentController do
   end
 
   operation(:standings,
+    operation_id: "tournament_standings",
     summary: "Placements, wins and champions",
     parameters: [id: [in: :path, schema: %Schema{type: :string}, required: true]],
     responses: [ok: {"Standings", "application/json", %Schema{type: :object}}]
@@ -188,6 +194,7 @@ defmodule GameServerWeb.Api.V1.TournamentController do
   end
 
   operation(:entries,
+    operation_id: "tournament_entries",
     summary: "Registered entries (paginated)",
     parameters: [
       id: [in: :path, schema: %Schema{type: :string}, required: true],
@@ -227,6 +234,7 @@ defmodule GameServerWeb.Api.V1.TournamentController do
   end
 
   operation(:bracket,
+    operation_id: "tournament_bracket",
     summary: "Brackets and their matches (paginated by bracket)",
     parameters: [
       id: [in: :path, schema: %Schema{type: :string}, required: true],
@@ -309,6 +317,7 @@ defmodule GameServerWeb.Api.V1.TournamentController do
   end
 
   operation(:my_match,
+    operation_id: "tournament_my_match",
     summary: "The caller's current unresolved match, if any",
     parameters: [id: [in: :path, schema: %Schema{type: :string}, required: true]],
     security: [%{"bearer" => []}],
@@ -345,12 +354,7 @@ defmodule GameServerWeb.Api.V1.TournamentController do
     end
   end
 
-  defp current_user(conn) do
-    case conn.assigns[:current_scope] do
-      %{user: user} -> user
-      _ -> nil
-    end
-  end
+  defp current_user(conn), do: Scope.user(conn.assigns[:current_scope])
 
   defp serialize_tournament(%Tournament{} = t) do
     %{

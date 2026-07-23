@@ -2,17 +2,15 @@ defmodule GameServerWeb.LobbyLive.Index do
   use GameServerWeb, :live_view
 
   alias GameServer.Accounts
+  alias GameServer.Accounts.Scope
+  alias GameServer.Accounts.User
   alias GameServer.Lobbies
   alias GameServerWeb.LiveHelpers
 
   @impl true
   def mount(_params, _session, socket) do
     # Get current user from scope if available
-    user =
-      case socket.assigns do
-        %{current_scope: %{user: u}} when u != nil -> u
-        _ -> nil
-      end
+    user = Scope.user(socket.assigns[:current_scope])
 
     # Subscribe to global lobby events
     if connected?(socket) do
@@ -65,7 +63,7 @@ defmodule GameServerWeb.LobbyLive.Index do
     attrs = %{"title" => title}
 
     case socket.assigns.current_scope do
-      %{user: %{id: id}} when id != nil ->
+      %{user_id: id} when id != nil ->
         attrs = Map.put(attrs, "host_id", id)
 
         # prevent creating more than one lobby for the same user
@@ -88,8 +86,8 @@ defmodule GameServerWeb.LobbyLive.Index do
   end
 
   def handle_event("leave", _params, socket) do
-    case socket.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(socket.assigns.current_scope) do
+      %User{} = user ->
         case Lobbies.leave_lobby(user) do
           {:ok, _} ->
             # refresh user to update lobby_id first
@@ -104,7 +102,7 @@ defmodule GameServerWeb.LobbyLive.Index do
             memberships_map =
               Enum.into(lobbies, %{}, fn l -> {l.id, Lobbies.list_memberships_for_lobby(l.id)} end)
 
-            updated_scope = %{socket.assigns.current_scope | user: refreshed_user}
+            updated_scope = socket.assigns.current_scope
 
             {:noreply,
              assign(socket,
@@ -143,8 +141,8 @@ defmodule GameServerWeb.LobbyLive.Index do
   end
 
   def handle_event("confirm_join", %{"_id" => id, "password" => password}, socket) do
-    case socket.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(socket.assigns.current_scope) do
+      %User{} = user ->
         confirm_lobby_join(socket, user, id, password)
 
       _ ->
@@ -194,7 +192,7 @@ defmodule GameServerWeb.LobbyLive.Index do
     # only allow editing for the host or hostless lobbies; others get a view-only modal
     can_edit =
       case socket.assigns.current_scope do
-        %{user: %{id: uid}} when uid != nil -> uid == lobby.host_id or lobby.hostless
+        %{user_id: uid} when uid != nil -> uid == lobby.host_id or lobby.hostless
         _ -> false
       end
 
@@ -211,8 +209,8 @@ defmodule GameServerWeb.LobbyLive.Index do
   end
 
   def handle_event("update_lobby", params, socket) do
-    case socket.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(socket.assigns.current_scope) do
+      %User{} = user ->
         id = params["_id"] || params["id"]
         lobby = Lobbies.get_lobby(id)
 
@@ -287,8 +285,8 @@ defmodule GameServerWeb.LobbyLive.Index do
   end
 
   def handle_event("kick", %{"lobby_id" => lobby_id, "target_id" => target_id}, socket) do
-    case socket.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(socket.assigns.current_scope) do
+      %User{} = user ->
         lobby = Lobbies.get_lobby(lobby_id)
         target = GameServer.Accounts.get_user!(target_id)
 
@@ -348,7 +346,7 @@ defmodule GameServerWeb.LobbyLive.Index do
             {l.id, Lobbies.list_memberships_for_lobby(l.id)}
           end)
 
-        updated_scope = %{socket.assigns.current_scope | user: refreshed_user}
+        updated_scope = socket.assigns.current_scope
 
         {:noreply,
          assign(socket,
@@ -391,7 +389,7 @@ defmodule GameServerWeb.LobbyLive.Index do
             {lp.id, Lobbies.list_memberships_for_lobby(lp.id)}
           end)
 
-        updated_scope = %{socket.assigns.current_scope | user: refreshed_user}
+        updated_scope = socket.assigns.current_scope
 
         {:noreply,
          assign(socket,
@@ -415,8 +413,8 @@ defmodule GameServerWeb.LobbyLive.Index do
   # Helpers for start_join flow that were moved here so all public
   # `handle_event/3` clauses stay grouped together at the top of the file.
   defp handle_start_join_for_lobby(socket, lobby) do
-    case socket.assigns.current_scope do
-      %{user: user} when user != nil -> handle_start_join_for_user(socket, lobby, user)
+    case Scope.user(socket.assigns.current_scope) do
+      %User{} = user -> handle_start_join_for_user(socket, lobby, user)
       _ -> {:noreply, push_navigate(socket, to: ~p"/users/log-in")}
     end
   end
@@ -441,7 +439,7 @@ defmodule GameServerWeb.LobbyLive.Index do
               {lp.id, Lobbies.list_memberships_for_lobby(lp.id)}
             end)
 
-          updated_scope = %{socket.assigns.current_scope | user: refreshed_user}
+          updated_scope = socket.assigns.current_scope
 
           {:noreply,
            assign(socket,
@@ -503,9 +501,8 @@ defmodule GameServerWeb.LobbyLive.Index do
 
     # If I was kicked, update my user state and show a message
     case socket.assigns.current_scope do
-      %{user: %{id: ^user_id}} ->
-        refreshed_user = GameServer.Accounts.get_user!(user_id)
-        updated_scope = %{socket.assigns.current_scope | user: refreshed_user}
+      %{user_id: ^user_id} ->
+        updated_scope = socket.assigns.current_scope
 
         # Unsubscribe from the old lobby
         if socket.assigns[:subscribed_lobby_id] do
@@ -536,10 +533,9 @@ defmodule GameServerWeb.LobbyLive.Index do
   # Helper to refresh all lobbies and memberships
   defp refresh_lobbies(socket) do
     user =
-      case socket.assigns do
-        %{current_scope: %{user: u}} when u != nil ->
-          # Refresh user to get latest lobby_id
-          GameServer.Accounts.get_user!(u.id)
+      case Scope.user(socket.assigns[:current_scope]) do
+        %{} = u ->
+          u
 
         _ ->
           nil
@@ -560,7 +556,7 @@ defmodule GameServerWeb.LobbyLive.Index do
     # Update current_scope with refreshed user
     socket =
       if user do
-        updated_scope = %{socket.assigns.current_scope | user: user}
+        updated_scope = socket.assigns.current_scope
         assign(socket, current_scope: updated_scope)
       else
         socket
@@ -591,11 +587,7 @@ defmodule GameServerWeb.LobbyLive.Index do
     memberships_map = Map.put(socket.assigns.memberships_map, lobby_id, memberships)
 
     # Also refresh the lobby itself in case it was updated
-    user =
-      case socket.assigns do
-        %{current_scope: %{user: u}} when u != nil -> u
-        _ -> nil
-      end
+    user = Scope.user(socket.assigns[:current_scope])
 
     lobbies =
       Lobbies.list_lobbies_for_user(user, %{},
@@ -666,7 +658,7 @@ defmodule GameServerWeb.LobbyLive.Index do
               <.input name="title" label={gettext("Title")} value={@title} />
               <div class="flex items-center gap-2">
                 <button type="submit" class="btn btn-primary">{gettext("Create")}</button>
-                <%= if @current_scope && @current_scope.user && @current_scope.user.lobby_id do %>
+                <%= if @current_scope && Scope.user(@current_scope) && Scope.user(@current_scope).lobby_id do %>
                   <span class="text-sm text-warning">
                     {gettext("Joined")}
                   </span>
@@ -691,8 +683,8 @@ defmodule GameServerWeb.LobbyLive.Index do
                     </div>
                   </div>
                   <div class="flex flex-col items-end gap-2">
-                    <%= if @current_scope && @current_scope.user do %>
-                      <% user = @current_scope.user %>
+                    <%= if @current_scope && Scope.user(@current_scope) do %>
+                      <% user = Scope.user(@current_scope) %>
 
                       <%= cond do %>
                         <% user.id == lobby.host_id -> %>
@@ -842,7 +834,7 @@ defmodule GameServerWeb.LobbyLive.Index do
                                 </span>
                               <% end %>
                               <%= cond do %>
-                                <% @current_scope && @current_scope.user && m.id == @current_scope.user.id -> %>
+                                <% @current_scope && Scope.user(@current_scope) && m.id == @current_scope.user_id -> %>
                                   <%!-- Current user (host or member) can leave --%>
                                   <button phx-click="leave" class="btn btn-xs btn-warning">
                                     {gettext("Leave")}
@@ -879,7 +871,7 @@ defmodule GameServerWeb.LobbyLive.Index do
                                   {gettext("Host")}
                                 </span>
                               <% end %>
-                              <%= if @current_scope && @current_scope.user && m.id == @current_scope.user.id do %>
+                              <%= if @current_scope && Scope.user(@current_scope) && m.id == @current_scope.user_id do %>
                                 <button phx-click="leave" class="btn btn-xs btn-warning ml-2">
                                   {gettext("Leave")}
                                 </button>

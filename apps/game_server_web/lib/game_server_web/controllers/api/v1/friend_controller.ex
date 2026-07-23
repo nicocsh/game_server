@@ -4,6 +4,7 @@ defmodule GameServerWeb.Api.V1.FriendController do
 
   import GameServerWeb.Helpers.ParamParser
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Accounts.User
   alias GameServer.Friends
   alias OpenApiSpex.Schema
@@ -466,8 +467,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   # refers to the friendship record ID (friendship_id), not a user_id.
 
   def create(conn, %{"target_user_id" => _} = params) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         target_id = params["target_user_id"]
 
         case Friends.create_request(user.id, target_id) do
@@ -495,8 +496,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def block(conn, %{"id" => id}) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         case parse_id(id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -520,8 +521,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def blacklist(conn, params) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         {page, page_size} = parse_page_params(params)
 
         users = Friends.list_blocked_users(user.id, page: page, page_size: page_size)
@@ -539,8 +540,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def block_user(conn, %{"user_id" => user_id}) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         case parse_id(user_id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -564,8 +565,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def unblock_user(conn, %{"user_id" => user_id}) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         case parse_id(user_id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -589,8 +590,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def index(conn, params) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         {page, page_size} = parse_page_params(params)
 
         # include the friendship row id so clients can call delete/accept/reject by id
@@ -610,8 +611,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def blocked(conn, params) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         {page, page_size} = parse_page_params(params)
 
         blocked = Friends.list_blocked_for_user(user.id, page: page, page_size: page_size)
@@ -633,8 +634,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def unblock(conn, %{"id" => id}) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         case parse_id(id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -661,8 +662,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def requests(conn, params) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         {page, page_size} = parse_page_params(params)
 
         incoming = Friends.list_incoming_requests(user.id, page: page, page_size: page_size)
@@ -699,8 +700,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def accept(conn, %{"id" => id}) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         case parse_id(id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -727,8 +728,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def reject(conn, %{"id" => id}) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         case parse_id(id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -755,8 +756,8 @@ defmodule GameServerWeb.Api.V1.FriendController do
   end
 
   def delete(conn, %{"id" => id}) do
-    case conn.assigns.current_scope do
-      %{user: user} when user != nil ->
+    case Scope.user(conn.assigns.current_scope) do
+      %User{} = user ->
         case parse_id(id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})

@@ -76,11 +76,18 @@ defmodule GameServer.Notifications do
     GameServer.Cache.get!({:notifications, :version, user_id}) || 1
   end
 
+  # Global row-version for get_notification/1 (no user_id available at read time),
+  # bumped when an existing notification row changes (update/delete/bulk) — not on
+  # insert, since a new row can't invalidate a cached existing one.
+  defp notification_row_version, do: GameServer.Cache.get!({:notifications, :row_version}) || 1
+  defp bump_notification_row, do: GameServer.Cache.bump_version({:notifications, :row_version})
+
   @doc false
   @spec invalidate_notifications_cache(user_id()) :: :ok
   def invalidate_notifications_cache(user_id) when is_binary(user_id) do
     GameServer.Async.run(fn ->
       _ = GameServer.Cache.bump_version({:notifications, :version, user_id})
+      _ = bump_notification_row()
       :ok
     end)
 
@@ -251,6 +258,11 @@ defmodule GameServer.Notifications do
 
   @doc "Get a single notification by ID."
   @spec get_notification(Ecto.UUID.t()) :: Notification.t() | nil
+  @decorate cacheable(
+              key: {:notifications, :get, notification_row_version(), id},
+              match: &(&1 != nil),
+              opts: [ttl: @notifications_cache_ttl_ms]
+            )
   def get_notification(id) do
     Repo.get_uuid(Notification, id)
   end
@@ -258,7 +270,10 @@ defmodule GameServer.Notifications do
   @doc "Get a single notification by ID (raises if not found)."
   @spec get_notification!(Ecto.UUID.t()) :: Notification.t()
   def get_notification!(id) do
-    Repo.get_uuid!(Notification, id)
+    case get_notification(id) do
+      %Notification{} = notification -> notification
+      nil -> raise Ecto.NoResultsError, queryable: Notification
+    end
   end
 
   # ---------------------------------------------------------------------------

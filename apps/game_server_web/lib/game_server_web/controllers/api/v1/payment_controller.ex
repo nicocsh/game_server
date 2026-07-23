@@ -2,6 +2,7 @@ defmodule GameServerWeb.Api.V1.PaymentController do
   use GameServerWeb, :controller
   use OpenApiSpex.ControllerSpecs
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Payments
   alias OpenApiSpex.Schema
 
@@ -42,7 +43,7 @@ defmodule GameServerWeb.Api.V1.PaymentController do
   )
 
   def entitlements(conn, _params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     data =
       user.id
@@ -75,7 +76,7 @@ defmodule GameServerWeb.Api.V1.PaymentController do
   )
 
   def stripe_checkout(conn, params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     case Payments.create_stripe_checkout(user, params) do
       {:ok, result} ->
@@ -120,7 +121,7 @@ defmodule GameServerWeb.Api.V1.PaymentController do
   )
 
   def steam_checkout(conn, params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     case Payments.create_steam_checkout(user, params) do
       {:ok, result} ->
@@ -159,7 +160,7 @@ defmodule GameServerWeb.Api.V1.PaymentController do
   )
 
   def steam_finalize(conn, params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     case Payments.finalize_steam_purchase(user, params) do
       {:ok, result} ->
@@ -189,7 +190,7 @@ defmodule GameServerWeb.Api.V1.PaymentController do
   )
 
   def validate(conn, %{"provider" => provider} = params) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
     attrs = Map.drop(params, ["provider"])
 
     if provider in ["apple", "google", "steam"] do

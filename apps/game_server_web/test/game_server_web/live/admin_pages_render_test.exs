@@ -33,7 +33,8 @@ defmodule GameServerWeb.AdminPagesRenderTest do
     {"/admin/achievements", "Achievements"},
     {"/admin/payments", "Payments"},
     {"/admin/translations", "Translation"},
-    {"/admin/lobby-snapshots", "Lobby snapshots"}
+    {"/admin/lobby-snapshots", "Lobby snapshots"},
+    {"/admin/storage", "Storage"}
   ]
 
   defp create_admin(_context) do
@@ -80,6 +81,19 @@ defmodule GameServerWeb.AdminPagesRenderTest do
       test "GET #{path} renders for admin", %{conn: conn, admin: admin} do
         {:ok, _view, _html} = conn |> log_in_user(admin) |> live(unquote(path))
       end
+    end
+  end
+
+  describe "Oban Web dashboard (/admin/oban) is admin-gated" do
+    test "redirects unauthenticated users", %{conn: conn} do
+      assert {:error, {:redirect, _}} = live(conn, "/admin/oban")
+    end
+
+    test "redirects non-admin users", %{conn: conn} do
+      _first = AccountsFixtures.user_fixture()
+      user = AccountsFixtures.user_fixture()
+      assert user.is_admin == false
+      assert {:error, {:redirect, _}} = live(log_in_user(conn, user), "/admin/oban")
     end
   end
 

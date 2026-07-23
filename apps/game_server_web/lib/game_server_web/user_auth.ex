@@ -144,7 +144,7 @@ defmodule GameServerWeb.UserAuth do
 
   # Do not renew session if the user is already logged in
   # to prevent CSRF errors or data being lost in tabs that are still open
-  defp renew_session(conn, user) when conn.assigns.current_scope.user.id == user.id do
+  defp renew_session(conn, user) when conn.assigns.current_scope.user_id == user.id do
     conn
   end
 
@@ -242,7 +242,7 @@ defmodule GameServerWeb.UserAuth do
   def on_mount(:require_authenticated, _params, session, socket) do
     socket = mount_current_scope(socket, session)
 
-    if socket.assigns.current_scope && socket.assigns.current_scope.user do
+    if Scope.user(socket.assigns.current_scope) do
       {:cont, socket}
     else
       socket =
@@ -264,8 +264,9 @@ defmodule GameServerWeb.UserAuth do
   def on_mount(:require_admin, _params, session, socket) do
     socket = mount_current_scope(socket, session)
 
-    if socket.assigns.current_scope && socket.assigns.current_scope.user &&
-         socket.assigns.current_scope.user.is_admin do
+    user = Scope.user(socket.assigns.current_scope)
+
+    if user && user.is_admin do
       {:cont, socket}
     else
       socket =
@@ -283,7 +284,7 @@ defmodule GameServerWeb.UserAuth do
   def on_mount(:require_sudo_mode, _params, session, socket) do
     socket = mount_current_scope(socket, session)
 
-    if Accounts.sudo_mode?(socket.assigns.current_scope.user, -10) do
+    if Accounts.sudo_mode?(Scope.user(socket.assigns.current_scope), -10) do
       {:cont, socket}
     else
       socket =
@@ -325,7 +326,7 @@ defmodule GameServerWeb.UserAuth do
 
   @doc "Returns the path to redirect to after log in."
   # the user was already logged in, redirect to settings
-  def signed_in_path(%Plug.Conn{assigns: %{current_scope: %Scope{user: %Accounts.User{}}}}) do
+  def signed_in_path(%Plug.Conn{assigns: %{current_scope: %Scope{}}}) do
     ~p"/users/settings"
   end
 
@@ -335,7 +336,7 @@ defmodule GameServerWeb.UserAuth do
   Plug for routes that require the user to be authenticated.
   """
   def require_authenticated_user(conn, _opts) do
-    if conn.assigns.current_scope && conn.assigns.current_scope.user do
+    if Scope.user(conn.assigns.current_scope) do
       conn
     else
       conn
@@ -350,8 +351,9 @@ defmodule GameServerWeb.UserAuth do
   Plug for routes that require the user to be an admin.
   """
   def require_admin_user(conn, _opts) do
-    if conn.assigns.current_scope && conn.assigns.current_scope.user &&
-         conn.assigns.current_scope.user.is_admin do
+    user = Scope.user(conn.assigns.current_scope)
+
+    if user && user.is_admin do
       conn
     else
       conn

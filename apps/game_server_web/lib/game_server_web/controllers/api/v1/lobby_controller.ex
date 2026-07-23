@@ -4,6 +4,7 @@ defmodule GameServerWeb.Api.V1.LobbyController do
 
   import GameServerWeb.Helpers.ParamParser
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Accounts.User
   alias GameServer.Lobbies
   alias GameServer.Lobbies.SpectatorTracker
@@ -461,8 +462,8 @@ defmodule GameServerWeb.Api.V1.LobbyController do
       |> put_status(:unauthorized)
       |> json(%{error: "Not authenticated"})
     else
-      case conn.assigns[:current_scope] do
-        %{user: user} when is_map(user) ->
+      case Scope.user(conn.assigns[:current_scope]) do
+        %User{} = user ->
           user = GameServer.Accounts.get_user(user.id)
 
           cond do
@@ -540,8 +541,8 @@ defmodule GameServerWeb.Api.V1.LobbyController do
   end
 
   def join(conn, %{"id" => id} = params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         user = GameServer.Accounts.get_user(user.id)
         password = Map.get(params, "password") || Map.get(params, :password)
 
@@ -649,8 +650,8 @@ defmodule GameServerWeb.Api.V1.LobbyController do
   end
 
   def quick_join(conn, params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         user = GameServer.Accounts.get_user(user.id)
 
         if user.party_id != nil do
@@ -744,8 +745,8 @@ defmodule GameServerWeb.Api.V1.LobbyController do
   end
 
   def update(conn, params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         # Use the authenticated user's lobby_id - require that the user is in a lobby
         if is_nil(user.lobby_id) do
           conn |> put_status(:bad_request) |> json(%{error: "not_in_lobby"})
@@ -778,8 +779,8 @@ defmodule GameServerWeb.Api.V1.LobbyController do
   end
 
   def kick(conn, %{"target_user_id" => target_user_id}) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         if is_nil(user.lobby_id) do
           conn |> put_status(:bad_request) |> json(%{error: "not_in_lobby"})
         else
@@ -813,8 +814,8 @@ defmodule GameServerWeb.Api.V1.LobbyController do
   end
 
   def leave(conn, _params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         # Use the authenticated user's lobby (ignore path id)
         if is_nil(user.lobby_id) do
           json(conn, %{})

@@ -13,7 +13,7 @@ defmodule GameServerWeb.OnMount.TrackConnection do
     if connected?(socket) do
       view_module = socket.view |> to_string() |> String.replace("Elixir.", "")
       scope = Map.get(socket.assigns, :current_scope)
-      user_id = if scope, do: scope.user && scope.user.id
+      user_id = scope && scope.user_id
 
       GameServerWeb.ConnectionTracker.register(:live_view, %{
         module: view_module,

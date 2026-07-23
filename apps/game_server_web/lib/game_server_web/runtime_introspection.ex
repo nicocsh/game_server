@@ -13,7 +13,7 @@ defmodule GameServerWeb.RuntimeIntrospection do
   `:search` blob the LiveView filters on.
   """
 
-  alias Crontab.CronExpression.Composer
+  alias Ecto.Adapters.SQL
   alias GameServer.Hooks.Declarations
   alias GameServer.Hooks.DynamicRpcs
   alias GameServer.Hooks.HookSchemas
@@ -22,7 +22,7 @@ defmodule GameServerWeb.RuntimeIntrospection do
   alias GameServer.Notifications.Types, as: NotificationTypes
   alias GameServer.Repo.AdvisoryLock
   alias GameServer.Repo.MigrationPaths
-  alias GameServer.Schedule.Scheduler
+  alias GameServer.Schedule
 
   # ── Compile-time sources ────────────────────────────────────────────────
   # Both files live at the repo root; when this app is consumed as a bare dep
@@ -30,9 +30,17 @@ defmodule GameServerWeb.RuntimeIntrospection do
 
   @sdk_hooks_path Path.expand("../../../../sdk/lib/game_server/hooks.ex", __DIR__)
   @env_example_path Path.expand("../../../../.env.example", __DIR__)
+  @host_runtime_path Path.expand("../../../../config/host_runtime.exs", __DIR__)
 
   if File.exists?(@sdk_hooks_path), do: @external_resource(@sdk_hooks_path)
   if File.exists?(@env_example_path), do: @external_resource(@env_example_path)
+  if File.exists?(@host_runtime_path), do: @external_resource(@host_runtime_path)
+
+  # The runtime config's source, so env_vars/0 can list every var the server
+  # actually reads — .env.example is hand-maintained and drifts from the code.
+  @host_runtime_source if File.exists?(@host_runtime_path),
+                         do: File.read!(@host_runtime_path),
+                         else: ""
 
   # Parsed from the SDK mirror (the file game devs read): per-callback `@doc`
   # where present, the full typespec signature always, and the `# ... callbacks`
@@ -83,47 +91,13 @@ defmodule GameServerWeb.RuntimeIntrospection do
   @spec hook_group_order() :: [String.t()]
   def hook_group_order, do: @hook_group_order
 
-  # Parsed .env.example rows: {name, default, description, section}.
-
-  @env_example (if File.exists?(@env_example_path) do
-                  @env_example_path
-                  |> File.read!()
-                  |> String.split("\n")
-                  |> Enum.reduce({nil, []}, fn line, {section, acc} ->
-                    cond do
-                      String.contains?(line, "─") ->
-                        {line |> String.replace(~r/[#─\s]+/, " ") |> String.trim(), acc}
-
-                      match = Regex.run(~r/^\s*#?\s*([A-Z][A-Z0-9_]+)=(.*)$/, line) ->
-                        [_, name, rest] = match
-
-                        # A quoted value is taken whole; otherwise the first
-                        # token is the value and the remainder a description.
-                        {default, desc} =
-                          case String.trim(rest) do
-                            "\"" <> _ = quoted ->
-                              {quoted, ""}
-
-                            other ->
-                              other
-                              |> String.split(~r/[ \t]{2,}| /, parts: 2)
-                              |> then(fn
-                                [value] -> {value, ""}
-                                [value, description] -> {value, String.trim(description)}
-                              end)
-                          end
-
-                        {section, [{name, default, desc, section} | acc]}
-
-                      true ->
-                        {section, acc}
-                    end
-                  end)
-                  |> elem(1)
-                  |> Enum.reverse()
-                else
-                  []
-                end)
+  # Core's .env.example content, baked at compile time (via @external_resource
+  # above) so it survives into a release where the file may be absent. Parsed at
+  # runtime by parse_env_content/1, which also parses the running host's own
+  # .env.example — see env_vars/0.
+  @env_example_source if File.exists?(@env_example_path),
+                        do: File.read!(@env_example_path),
+                        else: ""
 
   @secret_pattern ~r/SECRET|TOKEN|_KEY|PASSWORD|_PASS|DSN|PRIVATE|SALT|CREDENTIAL|SIGNING/
 
@@ -170,15 +144,35 @@ defmodule GameServerWeb.RuntimeIntrospection do
   # ── Env vars ────────────────────────────────────────────────────────────
 
   @doc """
-  Every documented env var (from `.env.example`) plus every `LIMIT_*` derived
-  from `GameServer.Limits.defaults/0`, with live set/unset state. Secret-like
-  values are masked.
+  Every env var the server can read, with live set/unset state (secret-like
+  values masked). Sources, in order: documented vars from core's and the host's
+  `.env.example`; vars actually read by `config/host_runtime.exs` (so the list
+  stays complete even when `.env.example` hasn't caught up); `LIMIT_*` from
+  `GameServer.Limits.defaults/0`; and plugin-declared vars via `env_vars/0`.
   """
   def env_vars do
-    # .env.example may show the same var twice (e.g. a dev and a docker
-    # variant); the first occurrence wins.
-    documented = @env_example |> Enum.uniq_by(&elem(&1, 0)) |> Enum.map(&env_row/1)
+    # Core's baked .env.example plus the running host's own .env.example (read at
+    # runtime), so a game's host-level vars show alongside core's — previously
+    # only core's file was ever read. First occurrence wins, so core stays
+    # canonical and the host contributes any extra vars it documents. (Vars a
+    # plugin declares via env_vars/0 are folded in separately below.)
+    documented =
+      (parse_env_content(@env_example_source) ++ parse_env_content(host_env_content()))
+      |> Enum.uniq_by(&elem(&1, 0))
+      |> Enum.map(&env_row/1)
+
     known = MapSet.new(documented, & &1.name)
+
+    # Vars the runtime config reads but .env.example never documented, so the
+    # page reflects what the server actually consumes rather than just what
+    # someone remembered to write down.
+    config =
+      @host_runtime_source
+      |> config_env_reads()
+      |> Enum.reject(fn {name, _, _, _} -> MapSet.member?(known, name) end)
+      |> Enum.map(&env_row/1)
+
+    known = MapSet.union(known, MapSet.new(config, & &1.name))
 
     limits =
       for {key, default} <- GameServer.Limits.defaults(),
@@ -195,7 +189,68 @@ defmodule GameServerWeb.RuntimeIntrospection do
         env_row({var.name, var.default, var.description, "Plugin: #{var.plugin}", var.type})
       end
 
-    Enum.sort_by(documented ++ limits ++ plugin, & &1.name)
+    Enum.sort_by(documented ++ config ++ limits ++ plugin, & &1.name)
+  end
+
+  # Env var names (and literal default, where one is written) read by the
+  # runtime config via `System.get_env/1,2` or `GameServer.Env.*`. A computed
+  # default (a variable/expression rather than a literal) is left blank.
+  defp config_env_reads(source) do
+    ~r/(?:System\.get_env|GameServer\.Env\.[a-z_]+)\(\s*"([A-Z][A-Z0-9_]+)"\s*(?:,\s*([^\n),]+))?/
+    |> Regex.scan(source)
+    |> Enum.map(fn
+      [_, name] ->
+        {name, "", "Read by config/host_runtime.exs", "Config"}
+
+      [_, name, default] ->
+        {name, String.trim(default), "Read by config/host_runtime.exs", "Config"}
+    end)
+    |> Enum.uniq_by(&elem(&1, 0))
+  end
+
+  # The running host's own .env.example, if present in the working directory.
+  # Best-effort: absent in some releases, and never worth breaking the page for.
+  defp host_env_content do
+    File.read!(Path.join(File.cwd!(), ".env.example"))
+  rescue
+    _ -> ""
+  end
+
+  # Parse .env.example content into {name, default, description, section} rows.
+  defp parse_env_content(content) do
+    content
+    |> String.split("\n")
+    |> Enum.reduce({nil, []}, fn line, {section, acc} ->
+      cond do
+        String.contains?(line, "─") ->
+          {line |> String.replace(~r/[#─\s]+/, " ") |> String.trim(), acc}
+
+        match = Regex.run(~r/^\s*#?\s*([A-Z][A-Z0-9_]+)=(.*)$/, line) ->
+          [_, name, rest] = match
+          {default, desc} = split_env_value(rest)
+          {section, [{name, default, desc, section} | acc]}
+
+        true ->
+          {section, acc}
+      end
+    end)
+    |> elem(1)
+    |> Enum.reverse()
+  end
+
+  # A quoted value is taken whole; otherwise the first token is the value and
+  # the remainder a description.
+  defp split_env_value(rest) do
+    case String.trim(rest) do
+      "\"" <> _ = quoted ->
+        {quoted, ""}
+
+      other ->
+        case String.split(other, ~r/[ \t]{2,}| /, parts: 2) do
+          [value] -> {value, ""}
+          [value, description] -> {value, String.trim(description)}
+        end
+    end
   end
 
   defp env_row({name, default, desc, section}), do: env_row({name, default, desc, section, nil})
@@ -407,14 +462,23 @@ defmodule GameServerWeb.RuntimeIntrospection do
       for mod <- ecto_schemas(app_modules(:game_server_core)),
           do: {mod, schema_domain(mod), "server"}
 
+    # The host app (:game_server_host) is the running game; its own Ecto schemas
+    # (a game's custom tables) live here, not in core or a plugin, so they were
+    # previously missing from the model entirely.
+    host =
+      for mod <- ecto_schemas(app_modules(:game_server_host)),
+          do: {mod, schema_domain(mod), "host"}
+
     plugin =
       for %{name: name, modules: modules} <- PluginManager.list(),
           mod <- ecto_schemas(modules),
           do: {mod, name, name}
 
-    (server ++ plugin)
+    fk_map = fk_on_delete_map()
+
+    (server ++ host ++ plugin)
     |> Enum.uniq_by(&elem(&1, 0))
-    |> Enum.map(fn {mod, domain, source} -> schema_row(mod, domain, source) end)
+    |> Enum.map(fn {mod, domain, source} -> schema_row(mod, domain, source, fk_map) end)
     |> Enum.sort_by(& &1.table)
   end
 
@@ -425,7 +489,72 @@ defmodule GameServerWeb.RuntimeIntrospection do
     end)
   end
 
-  defp schema_row(mod, domain, source) do
+  # {table, column} => on-delete action, read from the live DB. FK behaviour is a
+  # migration/DB concern that Ecto schemas don't carry, so a reader looking at
+  # the model can't otherwise tell whether deleting a row cascades. Best-effort:
+  # never break the page if the introspection query fails.
+  defp fk_on_delete_map do
+    repo = GameServer.Repo
+
+    # AdvisoryLock.postgres?/0 rather than comparing __adapter__ directly: the
+    # adapter is compile-time-known per build, so a literal comparison warns.
+    if AdvisoryLock.postgres?() do
+      postgres_fk_map(repo)
+    else
+      sqlite_fk_map(repo)
+    end
+  rescue
+    _ -> %{}
+  catch
+    _, _ -> %{}
+  end
+
+  defp postgres_fk_map(repo) do
+    sql = """
+    SELECT kcu.table_name, kcu.column_name, rc.delete_rule
+    FROM information_schema.referential_constraints rc
+    JOIN information_schema.key_column_usage kcu
+      ON kcu.constraint_name = rc.constraint_name
+     AND kcu.constraint_schema = rc.constraint_schema
+    """
+
+    %{rows: rows} = SQL.query!(repo, sql, [], log: false)
+    Map.new(rows, fn [table, col, rule] -> {{table, col}, normalize_delete_rule(rule)} end)
+  end
+
+  defp sqlite_fk_map(repo) do
+    %{rows: tables} =
+      SQL.query!(
+        repo,
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+        [],
+        log: false
+      )
+
+    Enum.reduce(tables, %{}, fn [table], acc ->
+      %{rows: fks} =
+        SQL.query!(repo, "PRAGMA foreign_key_list(\"#{table}\")", [], log: false)
+
+      # PRAGMA foreign_key_list columns: id, seq, table, from, to, on_update, on_delete, match
+      Enum.reduce(fks, acc, fn row, a ->
+        Map.put(a, {table, Enum.at(row, 3)}, normalize_delete_rule(Enum.at(row, 6)))
+      end)
+    end)
+  end
+
+  defp normalize_delete_rule(rule) do
+    case String.upcase(to_string(rule)) do
+      "CASCADE" -> "cascade"
+      "SET NULL" -> "nilify"
+      "SET DEFAULT" -> "set default"
+      "RESTRICT" -> "restrict"
+      _ -> "no action"
+    end
+  end
+
+  defp schema_row(mod, domain, source, fk_map) do
+    table = mod.__schema__(:source)
+
     fields =
       for f <- mod.__schema__(:fields) do
         %{name: to_string(f), type: format_ecto_type(mod.__schema__(:type, f))}
@@ -440,11 +569,12 @@ defmodule GameServerWeb.RuntimeIntrospection do
           kind: short_module(assoc.__struct__),
           related: inspect(assoc.related),
           related_table: related_table(assoc.related),
-          owner_key: to_string(assoc.owner_key)
+          owner_key: to_string(assoc.owner_key),
+          # DB-level ON DELETE for this column's FK — the thing that isn't
+          # visible from the Ecto schema alone. Only belongs_to columns have one.
+          on_delete: Map.get(fk_map, {table, to_string(assoc.owner_key)})
         }
       end
-
-    table = mod.__schema__(:source)
 
     %{
       id: table,
@@ -631,42 +761,22 @@ defmodule GameServerWeb.RuntimeIntrospection do
 
   # ── Ops: jobs, locks, migrations ────────────────────────────────────────
 
-  @doc "Scheduled Quantum jobs (config-defined and plugin-registered)."
+  @doc "Plugin-registered scheduled jobs (see `GameServer.Schedule`)."
   def scheduled_jobs do
-    # A `rescue` would not help here: calling a dead GenServer exits rather
-    # than raising, so check the process instead.
-    if Process.whereis(Scheduler) == nil, do: [], else: job_rows()
-  end
-
-  defp job_rows do
-    Scheduler.jobs()
-    |> Enum.map(fn {name, job} ->
-      schedule = format_schedule(job.schedule)
-
+    Schedule.list()
+    |> Enum.map(fn %{name: name, schedule: schedule, hook: hook, state: state} ->
       %{
         id: to_string(name),
         name: to_string(name),
         schedule: schedule,
-        state: to_string(job.state),
-        timezone: to_string(job.timezone),
-        task: format_task(job.task),
-        search: String.downcase("#{name} #{schedule} #{job.state}")
+        state: to_string(state),
+        timezone: "UTC",
+        task: "#{hook}/1",
+        search: String.downcase("#{name} #{schedule} #{state}")
       }
     end)
     |> Enum.sort_by(& &1.name)
   end
-
-  # Composer only understands cron expressions; a job registered with a
-  # non-cron schedule falls back to its raw form rather than breaking the tab.
-  defp format_schedule(schedule) do
-    Composer.compose(schedule)
-  rescue
-    _ -> inspect(schedule)
-  end
-
-  defp format_task({mod, fun, args}), do: "#{inspect(mod)}.#{fun}/#{length(args)}"
-  defp format_task(fun) when is_function(fun), do: inspect(fun)
-  defp format_task(other), do: inspect(other)
 
   @doc "Advisory lock namespaces (from the registry the locks require)."
   def advisory_locks do

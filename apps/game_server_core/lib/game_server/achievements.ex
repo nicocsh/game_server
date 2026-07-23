@@ -132,6 +132,11 @@ defmodule GameServer.Achievements do
 
   @doc "Get an achievement by ID."
   @spec get_achievement(Ecto.UUID.t()) :: Achievement.t() | nil
+  @decorate cacheable(
+              key: {:achievements, :get, achievements_version(), id},
+              match: &(&1 != nil),
+              opts: [ttl: @achievements_cache_ttl_ms]
+            )
   def get_achievement(id), do: Repo.get_uuid(Achievement, id)
 
   @doc "Get an achievement by slug."

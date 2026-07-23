@@ -23,6 +23,8 @@ Game + Backend = Gamend
 - **Payments** — Stripe Checkout, Google Play, App Store, and Steam provider flows with receipt validation, webhooks, entitlements, refunds, and admin tools
 - **Key-Value Store** — Server-side key-value storage with access control hooks
 - **Server Scripting** — Elixir hooks on server events (login, lobby created, achievement unlocked, etc.)
+- **Background Jobs** — Durable, retryable background and scheduled (cron) jobs from server hooks, on Postgres or SQLite
+- **Object Storage** — Avatar/UGC uploads with a pluggable backend: local disk or any S3-compatible service (AWS S3, Cloudflare R2, MinIO, …)
 - **Admin Portal** — Built-in web dashboard for managing all resources
 
 ## Client SDKs

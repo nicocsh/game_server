@@ -3,6 +3,7 @@ defmodule GameServerWeb.Api.V1.KvController do
   use OpenApiSpex.ControllerSpecs
 
   alias GameServer.Accounts.Scope
+  alias GameServer.Accounts.User
   alias GameServer.Hooks
   alias GameServer.KV
   alias OpenApiSpex.Schema
@@ -46,8 +47,9 @@ defmodule GameServerWeb.Api.V1.KvController do
     user_id = GameServer.UUIDv7.cast_or_nil(params["user_id"])
     lobby_id = GameServer.UUIDv7.cast_or_nil(params["lobby_id"])
 
-    # Use caller scope assigned by plugs (route is authenticated via :api_auth)
-    caller = Map.get(conn.assigns, :current_scope)
+    # Resolve the plug-assigned scope to the fresh caller user (route is
+    # authenticated via :api_auth).
+    caller = Scope.user(Map.get(conn.assigns, :current_scope))
 
     case Hooks.internal_call(:before_kv_get, [key, %{user_id: user_id, lobby_id: lobby_id}],
            caller: caller
@@ -79,17 +81,17 @@ defmodule GameServerWeb.Api.V1.KvController do
   defp kv_access_allowed?(:server_only, _caller, _user_id, _lobby_id), do: false
   defp kv_access_allowed?(_access, _caller, _user_id, _lobby_id), do: false
 
-  defp caller_owns?(%Scope{user: %{id: caller_id}}, user_id),
+  defp caller_owns?(%User{id: caller_id}, user_id),
     do: is_binary(user_id) and caller_id == user_id
 
   defp caller_owns?(_caller, _user_id), do: false
 
-  defp caller_in_lobby?(%Scope{user: %{lobby_id: caller_lobby_id}}, lobby_id),
+  defp caller_in_lobby?(%User{lobby_id: caller_lobby_id}, lobby_id),
     do: is_binary(lobby_id) and caller_lobby_id == lobby_id
 
   defp caller_in_lobby?(_caller, _lobby_id), do: false
 
-  defp caller_admin?(%Scope{user: %{is_admin: true}}), do: true
+  defp caller_admin?(%User{is_admin: true}), do: true
   defp caller_admin?(_caller), do: false
 
   defp forbidden(conn), do: conn |> put_status(:forbidden) |> json(%{error: "forbidden"})

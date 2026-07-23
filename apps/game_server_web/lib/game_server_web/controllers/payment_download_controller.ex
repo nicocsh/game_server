@@ -1,10 +1,11 @@
 defmodule GameServerWeb.PaymentDownloadController do
   use GameServerWeb, :controller
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Payments
 
   def show(conn, %{"id" => id}) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
 
     with {:ok, entitlement_id} <- Ecto.UUID.cast(id),
          %{} = entitlement <- find_entitlement(user.id, entitlement_id),

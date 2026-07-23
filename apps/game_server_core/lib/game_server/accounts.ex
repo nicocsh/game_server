@@ -178,6 +178,133 @@ defmodule GameServer.Accounts do
     ) || 0
   end
 
+  # Fields the ADMIN search matches. Deliberately wider than search_users/2
+  # (username + display_name only): email, device id and provider ids are
+  # sensitive and must never be searchable through the public player search.
+  @admin_search_fields ~w(email username display_name device_id google_id apple_id facebook_id steam_id discord_id)a
+
+  @doc """
+  Admin user listing: search across identity fields (or an exact id), optional
+  facet filters, sorting and pagination — the query behind the admin Users page.
+
+  Distinct from `search_users/2`, the privacy-safe player search: this matches
+  sensitive fields a player cannot, so it is admin-only.
+
+  `filters` keys (string or atom): `:search` (term or full id), `:facets` (list
+  of `"online"`, `"unactivated"`, and provider names). `opts`: `:page`,
+  `:page_size`, `:sort_field`, `:sort_dir`.
+  """
+  @spec list_all_users(map(), keyword()) :: [User.t()]
+  def list_all_users(filters \\ %{}, opts \\ []) do
+    page = Keyword.get(opts, :page, 1)
+    page_size = Keyword.get(opts, :page_size, 25)
+
+    filters
+    |> all_users_query()
+    |> order_by(^admin_user_sort(opts))
+    |> limit(^page_size)
+    |> offset(^((page - 1) * page_size))
+    |> Repo.all()
+  end
+
+  @doc "Row count for `list_all_users/2` under the same filters."
+  @spec count_list_all_users(map()) :: non_neg_integer()
+  def count_list_all_users(filters \\ %{}) do
+    filters |> all_users_query() |> Repo.aggregate(:count, :id)
+  end
+
+  defp all_users_query(filters) do
+    search = to_string(filter_get(filters, :search) || "")
+    facets = filter_get(filters, :facets) || []
+
+    from(u in User)
+    |> filter_users_by_admin_search(String.trim(search))
+    |> filter_users_by_facets(facets)
+  end
+
+  defp filter_get(filters, key), do: Map.get(filters, key) || Map.get(filters, to_string(key))
+
+  defp filter_users_by_admin_search(query, ""), do: query
+
+  defp filter_users_by_admin_search(query, term) do
+    case Ecto.UUID.cast(term) do
+      # A full id: exact match (mirrors the id lookup in search_users/2).
+      {:ok, id} ->
+        from u in query, where: u.id == ^id
+
+      _ ->
+        like = "%#{Repo.escape_like(term)}%"
+
+        combined =
+          Enum.reduce(@admin_search_fields, nil, fn field, acc ->
+            clause =
+              dynamic(
+                [u],
+                fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", field(u, ^field), ^like)
+              )
+
+            if acc, do: dynamic([u], ^acc or ^clause), else: clause
+          end)
+
+        from u in query, where: ^combined
+    end
+  end
+
+  defp filter_users_by_facets(query, facets) do
+    query
+    |> then(fn q -> if "online" in facets, do: where(q, [u], u.is_online == true), else: q end)
+    |> then(fn q ->
+      if "unactivated" in facets, do: where(q, [u], u.is_activated == false), else: q
+    end)
+    |> apply_provider_presence(facets -- ["online", "unactivated"])
+  end
+
+  defp apply_provider_presence(query, providers) do
+    combined =
+      providers
+      |> Enum.map(&provider_presence_clause/1)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.reduce(nil, fn c, acc -> if acc, do: dynamic([u], ^acc or ^c), else: c end)
+
+    if combined, do: from(u in query, where: ^combined), else: query
+  end
+
+  defp provider_presence_clause("discord"),
+    do: dynamic([u], not is_nil(u.discord_id) and u.discord_id != "")
+
+  defp provider_presence_clause("google"),
+    do: dynamic([u], not is_nil(u.google_id) and u.google_id != "")
+
+  defp provider_presence_clause("apple"),
+    do: dynamic([u], not is_nil(u.apple_id) and u.apple_id != "")
+
+  defp provider_presence_clause("facebook"),
+    do: dynamic([u], not is_nil(u.facebook_id) and u.facebook_id != "")
+
+  defp provider_presence_clause("steam"),
+    do: dynamic([u], not is_nil(u.steam_id) and u.steam_id != "")
+
+  defp provider_presence_clause("device"),
+    do: dynamic([u], not is_nil(u.device_id) and u.device_id != "")
+
+  defp provider_presence_clause("email"),
+    do: dynamic([u], not is_nil(u.hashed_password) and u.hashed_password != "")
+
+  defp provider_presence_clause(_), do: nil
+
+  defp admin_user_sort(opts) do
+    dir = if Keyword.get(opts, :sort_dir) == "asc", do: :asc, else: :desc
+
+    field =
+      case Keyword.get(opts, :sort_field) do
+        "updated_at" -> :updated_at
+        "last_seen_at" -> :last_seen_at
+        _ -> :inserted_at
+      end
+
+    [{dir, field}]
+  end
+
   @doc """
   Returns the total number of users.
   """
@@ -2036,6 +2163,29 @@ defmodule GameServer.Accounts do
   @spec change_username(User.t(), map()) :: Ecto.Changeset.t()
   def change_username(user, attrs \\ %{}) do
     User.username_changeset(user, attrs)
+  end
+
+  @doc """
+  Set the user's avatar URL (`profile_url`), typically after an upload confirmed
+  by `GameServer.Storage`. Same cache/broadcast/hook path as other profile edits.
+  """
+  def update_user_avatar(%User{} = user, url) when is_binary(url) do
+    case User.avatar_changeset(user, %{"profile_url" => url}) |> Repo.update() do
+      {:ok, updated} = ok ->
+        invalidate_user_cache_sync(user)
+        invalidate_user_cache_sync(updated)
+        broadcast_user_update(updated)
+        broadcast_member_update(updated)
+
+        GameServer.Async.run(fn ->
+          GameServer.Hooks.internal_call(:after_user_updated, [updated])
+        end)
+
+        ok
+
+      err ->
+        err
+    end
   end
 
   @doc """

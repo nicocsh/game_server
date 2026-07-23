@@ -10,6 +10,7 @@ defmodule GameServerHost.Router do
   import GameServerWeb.UserAuth
   import GameServerWeb.Router.Shared
   import Phoenix.LiveDashboard.Router
+  import Oban.Web.Router
 
   game_server_pipelines()
 

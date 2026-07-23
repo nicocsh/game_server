@@ -2,6 +2,7 @@ defmodule GameServerWeb.ChatLive do
   use GameServerWeb, :live_view
 
   alias GameServer.Accounts
+  alias GameServer.Accounts.Scope
   alias GameServer.Chat
   alias GameServer.Friends
   alias GameServer.Groups
@@ -11,7 +12,7 @@ defmodule GameServerWeb.ChatLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    user = socket.assigns.current_scope.user
+    user = Scope.user(socket.assigns.current_scope)
 
     friends = Friends.list_friends_for_user(user.id)
     my_groups = Groups.list_user_groups_with_role(user.id)
@@ -31,7 +32,7 @@ defmodule GameServerWeb.ChatLive do
 
     {:ok,
      socket
-     |> assign(:user, user)
+     |> assign(:user_id, user.id)
      |> assign(:friends, friends)
      |> assign(:my_groups, my_groups)
      |> assign(:friend_unread, friend_unread)
@@ -57,7 +58,7 @@ defmodule GameServerWeb.ChatLive do
       group = Groups.get_group(gid)
 
       if group do
-        user = socket.assigns.user
+        user = Scope.user(socket.assigns.current_scope)
         mark_group_chat_read(user.id, gid)
 
         {:noreply,
@@ -85,7 +86,7 @@ defmodule GameServerWeb.ChatLive do
       target = Accounts.get_user(fid)
 
       if target do
-        user = socket.assigns.user
+        user = Scope.user(socket.assigns.current_scope)
         mark_friend_chat_read(user.id, fid)
 
         {:noreply,
@@ -216,12 +217,12 @@ defmodule GameServerWeb.ChatLive do
                 id={"msg-" <> to_string(msg.id)}
                 class={[
                   "flex flex-col gap-0.5",
-                  if(msg.sender_id == @user.id, do: "items-end", else: "items-start"),
+                  if(msg.sender_id == @user_id, do: "items-end", else: "items-start"),
                   if(show_header, do: "mt-3", else: "mt-0.5")
                 ]}
               >
                 <div :if={show_header} class="text-xs text-base-content/50">
-                  <%= if msg.sender_id == @user.id do %>
+                  <%= if msg.sender_id == @user_id do %>
                     {gettext("You")}
                   <% else %>
                     {sender_name(msg)}
@@ -257,10 +258,10 @@ defmodule GameServerWeb.ChatLive do
                 <% else %>
                   <div class={[
                     "group flex items-end gap-1 w-full",
-                    if(msg.sender_id == @user.id, do: "justify-end", else: "justify-start")
+                    if(msg.sender_id == @user_id, do: "justify-end", else: "justify-start")
                   ]}>
                     <div
-                      :if={msg.sender_id == @user.id}
+                      :if={msg.sender_id == @user_id}
                       class="flex-shrink-0 flex gap-0.5 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity"
                     >
                       <button
@@ -284,7 +285,7 @@ defmodule GameServerWeb.ChatLive do
                     </div>
                     <div class={[
                       "px-3 py-1.5 rounded-lg text-sm max-w-[80%] break-words",
-                      if(msg.sender_id == @user.id,
+                      if(msg.sender_id == @user_id,
                         do: "bg-primary text-primary-content",
                         else: "bg-base-200"
                       )
@@ -333,57 +334,21 @@ defmodule GameServerWeb.ChatLive do
   # ---------------------------------------------------------------------------
 
   @impl true
+  # Selection happens in handle_params, so the click only updates the URL —
+  # that keeps the chosen conversation in the address bar and restores it on
+  # refresh (previously the URL stayed /chat and a reload reset to no chat).
   def handle_event("open_friend", %{"id" => id}, socket) do
-    fid = parse_id(id)
-    target = Accounts.get_user(fid)
-
-    if target do
-      user = socket.assigns.user
-      mark_friend_chat_read(user.id, fid)
-
-      {:noreply,
-       socket
-       |> assign(:chat_type, "friend")
-       |> assign(:chat_target, fid)
-       |> assign(:chat_target_name, LiveHelpers.public_user_name(target))
-       |> assign(:page, 1)
-       |> assign(:editing_message_id, nil)
-       |> assign(:editing_message_content, "")
-       |> update(:friend_unread, &Map.delete(&1, fid))
-       |> reload_messages()}
-    else
-      {:noreply, put_flash(socket, :error, gettext("Not found"))}
-    end
+    {:noreply, push_patch(socket, to: ~p"/chat?#{[type: "friend", id: id]}")}
   end
 
-  @impl true
   def handle_event("open_group", %{"id" => id}, socket) do
-    gid = parse_id(id)
-    group = Groups.get_group(gid)
-
-    if group do
-      user = socket.assigns.user
-      mark_group_chat_read(user.id, gid)
-
-      {:noreply,
-       socket
-       |> assign(:chat_type, "group")
-       |> assign(:chat_target, gid)
-       |> assign(:chat_target_name, group.title || group.name)
-       |> assign(:page, 1)
-       |> assign(:editing_message_id, nil)
-       |> assign(:editing_message_content, "")
-       |> update(:group_unread, &Map.delete(&1, gid))
-       |> reload_messages()}
-    else
-      {:noreply, put_flash(socket, :error, gettext("Not found"))}
-    end
+    {:noreply, push_patch(socket, to: ~p"/chat?#{[type: "group", id: id]}")}
   end
 
   @impl true
   def handle_event("send_message", %{"content" => content}, socket) do
     content = String.trim(content)
-    user = socket.assigns.user
+    user = Scope.user(socket.assigns.current_scope)
     chat_type = socket.assigns.chat_type
     chat_target = socket.assigns.chat_target
 
@@ -455,7 +420,9 @@ defmodule GameServerWeb.ChatLive do
     content = String.trim(content)
 
     if content != "" do
-      case Chat.update_message(socket.assigns.user.id, parse_id(id), %{"content" => content}) do
+      case Chat.update_message(socket.assigns.current_scope.user_id, parse_id(id), %{
+             "content" => content
+           }) do
         {:ok, _msg} ->
           {:noreply,
            socket
@@ -473,7 +440,7 @@ defmodule GameServerWeb.ChatLive do
 
   @impl true
   def handle_event("chat_delete", %{"id" => id}, socket) do
-    case Chat.delete_own_message(socket.assigns.user.id, parse_id(id)) do
+    case Chat.delete_own_message(socket.assigns.current_scope.user_id, parse_id(id)) do
       {:ok, _msg} ->
         {:noreply,
          socket
@@ -496,7 +463,7 @@ defmodule GameServerWeb.ChatLive do
 
   @impl true
   def handle_info({:chat_message_created, msg}, socket) do
-    user = socket.assigns.user
+    user = Scope.user(socket.assigns.current_scope)
 
     if matches_current_chat?(socket, msg) do
       # Active chat — reload messages and mark read
@@ -529,7 +496,7 @@ defmodule GameServerWeb.ChatLive do
   defp reload_messages(socket) do
     chat_type = socket.assigns.chat_type
     chat_target = socket.assigns.chat_target
-    user = socket.assigns.user
+    user = Scope.user(socket.assigns.current_scope)
 
     if chat_type && chat_target do
       page_size = socket.assigns.page_size
@@ -557,7 +524,7 @@ defmodule GameServerWeb.ChatLive do
   end
 
   defp mark_current_chat_read(socket) do
-    user = socket.assigns.user
+    user = Scope.user(socket.assigns.current_scope)
 
     case {socket.assigns.chat_type, socket.assigns.chat_target} do
       {"friend", fid} when is_integer(fid) -> mark_friend_chat_read(user.id, fid)

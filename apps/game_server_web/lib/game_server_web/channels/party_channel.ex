@@ -39,7 +39,7 @@ defmodule GameServerWeb.PartyChannel do
     current_scope = Map.get(socket.assigns, :current_scope)
 
     with {:ok, party_id} <- Ecto.UUID.cast(party_id_str),
-         %Scope{user: %{id: user_id}} <- current_scope do
+         %Scope{user_id: user_id} <- current_scope do
       case Accounts.get_user(user_id) do
         %User{party_id: ^party_id} ->
           # Subscribe to party PubSub events to forward to WebSocket clients

@@ -4,6 +4,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
 
   import GameServerWeb.Helpers.ParamParser
 
+  alias GameServer.Accounts.Scope
+  alias GameServer.Accounts.User
   alias GameServer.Parties
   alias GameServerWeb.Serializers
   alias OpenApiSpex.Schema
@@ -466,8 +468,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   # ---------------------------------------------------------------------------
 
   def show(conn, _params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         if is_nil(user.party_id) do
           conn |> put_status(:not_found) |> json(%{error: "not_in_party"})
         else
@@ -486,8 +488,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def create(conn, params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         case Parties.create_party(user, params) do
           {:ok, party} ->
             conn
@@ -514,8 +516,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def leave(conn, _params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         case Parties.leave_party(user) do
           {:ok, _} ->
             json(conn, %{})
@@ -533,8 +535,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def invite(conn, %{"target_user_id" => target_user_id}) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         case parse_id(target_user_id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -570,8 +572,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def cancel_party_invite(conn, %{"target_user_id" => target_user_id}) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         case parse_id(target_user_id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -598,8 +600,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def accept_party_invite(conn, %{"party_id" => party_id}) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         case parse_id(party_id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -632,8 +634,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def decline_party_invite(conn, %{"party_id" => party_id}) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         case parse_id(party_id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -649,8 +651,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def list_invitations(conn, _params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         invitations = Parties.list_party_invitations(user)
         json(conn, invitations)
 
@@ -660,8 +662,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def list_sent_invitations(conn, _params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         invitations = Parties.list_sent_party_invitations(user)
         json(conn, invitations)
 
@@ -671,8 +673,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def kick(conn, %{"target_user_id" => target_user_id}) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         case parse_id(target_user_id) do
           nil ->
             conn |> put_status(:bad_request) |> json(%{error: "invalid_id"})
@@ -705,8 +707,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def update(conn, params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         case Parties.update_party(user, params) do
           {:ok, party} ->
             json(conn, serialize_party(party))
@@ -737,8 +739,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def create_lobby(conn, params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         case Parties.create_lobby_with_party(user, params) do
           {:ok, lobby} ->
             conn
@@ -777,8 +779,8 @@ defmodule GameServerWeb.Api.V1.PartyController do
   end
 
   def join_lobby(conn, %{"id" => id} = params) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user ->
         case Ecto.UUID.cast(to_string(id)) do
           {:ok, lobby_id} ->
             opts = %{password: Map.get(params, "password") || Map.get(params, :password)}

@@ -89,7 +89,7 @@ defmodule GameServerWeb.Api.V1.AchievementController do
 
     user_id =
       case conn.assigns[:current_scope] do
-        %{user: %{id: id}} -> id
+        %{user_id: id} -> id
         _ -> nil
       end
 
@@ -143,7 +143,7 @@ defmodule GameServerWeb.Api.V1.AchievementController do
       achievement ->
         user_id =
           case conn.assigns[:current_scope] do
-            %{user: %{id: id}} -> id
+            %{user_id: id} -> id
             _ -> nil
           end
 
@@ -196,7 +196,7 @@ defmodule GameServerWeb.Api.V1.AchievementController do
 
   def me(conn, params) do
     case conn.assigns[:current_scope] do
-      %{user: %{id: user_id}} ->
+      %{user_id: user_id} ->
         page = parse_int(params["page"], 1)
         page_size = parse_int(params["page_size"], 25)
 

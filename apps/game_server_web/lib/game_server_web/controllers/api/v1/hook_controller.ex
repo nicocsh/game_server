@@ -2,6 +2,7 @@ defmodule GameServerWeb.Api.V1.HookController do
   use GameServerWeb, :controller
   use OpenApiSpex.ControllerSpecs
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Hooks.DynamicRpcs
   alias GameServer.Hooks.HookSchemas
   alias GameServer.Hooks.PluginManager
@@ -124,7 +125,7 @@ defmodule GameServerWeb.Api.V1.HookController do
 
   def invoke(conn, %{"plugin" => plugin, "fn" => fn_name} = params)
       when is_binary(plugin) and is_binary(fn_name) do
-    user = conn.assigns.current_scope.user
+    user = Scope.user(conn.assigns.current_scope)
     args = Map.get(params, "args", [])
 
     args = if is_list(args), do: args, else: [args]

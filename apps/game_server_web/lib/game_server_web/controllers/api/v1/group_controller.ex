@@ -4,6 +4,7 @@ defmodule GameServerWeb.Api.V1.GroupController do
 
   import GameServerWeb.Helpers.ParamParser
 
+  alias GameServer.Accounts.Scope
   alias GameServer.Accounts.User
   alias GameServer.Groups
   alias GameServerWeb.Serializers
@@ -1426,8 +1427,8 @@ defmodule GameServerWeb.Api.V1.GroupController do
   # ---------------------------------------------------------------------------
 
   defp with_auth(conn, fun) do
-    case conn.assigns[:current_scope] do
-      %{user: user} when is_map(user) -> fun.(user)
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = user -> fun.(user)
       _ -> conn |> put_status(:unauthorized) |> json(%{error: "Not authenticated"})
     end
   end

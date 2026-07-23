@@ -39,6 +39,22 @@ config :game_server_core, GameServer.Repo,
   migration_primary_key: [name: :id, type: :binary_id],
   migration_foreign_key: [type: :binary_id]
 
+# Background jobs (GameServer.Jobs / GameServer.Schedule). The `:engine` is
+# injected at runtime from the Repo's actual adapter by
+# GameServer.Jobs.oban_config/0. Kept in sync with config/host_config.exs — the
+# web app is also published/tested standalone.
+config :game_server_core, Oban,
+  repo: GameServer.Repo,
+  queues: [default: 10, hooks: 20, mailers: 5, storage: 5, webhooks: 10],
+  plugins: [
+    {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
+    {Oban.Plugins.Cron, crontab: [{"* * * * *", GameServer.Schedule.TickWorker}]}
+  ]
+
+# Object storage — defaults to local disk (see config/host_config.exs).
+config :game_server_core, GameServer.Storage, adapter: GameServer.Storage.Local
+config :ex_aws, json_codec: Jason
+
 config :game_server_web, GameServerWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,

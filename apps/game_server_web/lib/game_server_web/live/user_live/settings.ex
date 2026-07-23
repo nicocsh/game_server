@@ -9,6 +9,7 @@ defmodule GameServerWeb.UserLive.Settings do
   use GameServerWeb, :live_view
 
   alias GameServer.Accounts
+  alias GameServer.Accounts.Scope
   alias GameServer.Friends
   alias GameServer.Groups
   alias GameServerWeb.UserLive.Settings.AccountTab
@@ -117,7 +118,7 @@ defmodule GameServerWeb.UserLive.Settings do
   @impl true
   def mount(%{"token" => token}, _session, socket) do
     socket =
-      case Accounts.update_user_email(socket.assigns.current_scope.user, token) do
+      case Accounts.update_user_email(Scope.user(socket.assigns.current_scope), token) do
         {:ok, _user} ->
           put_flash(socket, :info, gettext("Success."))
 
@@ -129,7 +130,7 @@ defmodule GameServerWeb.UserLive.Settings do
   end
 
   def mount(_params, _session, socket) do
-    user = socket.assigns.current_scope.user
+    user = Scope.user(socket.assigns.current_scope)
 
     socket =
       socket

@@ -40,7 +40,7 @@ defmodule GameServerWeb.AuthController do
     {conn, state}
   end
 
-  defp browser_oauth_state_data(%{assigns: %{current_scope: %Scope{user: %User{id: user_id}}}}) do
+  defp browser_oauth_state_data(%{assigns: %{current_scope: %Scope{user_id: user_id}}}) do
     %{browser: true, link_user_id: user_id}
   end
 
@@ -557,8 +557,8 @@ defmodule GameServerWeb.AuthController do
   defp handle_browser_oauth_callback(conn, provider, user_params) do
     config = oauth_provider!(provider)
 
-    case conn.assigns[:current_scope] do
-      %{:user => current_user} ->
+    case Scope.user(conn.assigns[:current_scope]) do
+      %User{} = current_user ->
         case Accounts.link_account(
                current_user,
                user_params,

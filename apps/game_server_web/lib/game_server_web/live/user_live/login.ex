@@ -2,6 +2,7 @@ defmodule GameServerWeb.UserLive.Login do
   use GameServerWeb, :live_view
 
   alias GameServer.Accounts
+  alias GameServer.Accounts.Scope
   alias GameServer.Env
 
   @impl true
@@ -169,9 +170,11 @@ defmodule GameServerWeb.UserLive.Login do
 
   @impl true
   def mount(_params, _session, socket) do
+    current_user = Scope.user(socket.assigns[:current_scope])
+
     email =
       Phoenix.Flash.get(socket.assigns.flash, :email) ||
-        get_in(socket.assigns, [:current_scope, Access.key(:user), Access.key(:email)])
+        (current_user && current_user.email)
 
     form = to_form(%{"email" => email}, as: "user")
 

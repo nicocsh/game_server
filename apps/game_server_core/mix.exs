@@ -42,6 +42,9 @@ defmodule GameServerCore.MixProject do
       {:gen_smtp, "~> 1.0"},
       {:req, "~> 0.6"},
       {:stripity_stripe, "~> 3.3"},
+      {:ex_aws, "~> 2.5"},
+      {:ex_aws_s3, "~> 2.5"},
+      {:sweet_xml, "~> 0.7"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:gettext, "~> 1.0"},
@@ -55,7 +58,10 @@ defmodule GameServerCore.MixProject do
       {:ueberauth_steam_strategy, "~> 0.1.6"},
       {:jose, "~> 1.11"},
       {:guardian, "~> 2.3"},
-      {:quantum, "~> 3.5"},
+      {:oban, "~> 2.19"},
+      # crontab was pulled in transitively by quantum; the Schedule tick worker
+      # still parses/matches cron expressions with it.
+      {:crontab, "~> 1.1"},
       {:corsica, "~> 2.0"},
       {:mdex, "~> 0.13"},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
@@ -84,6 +90,7 @@ defmodule GameServerCore.MixProject do
   defp docs do
     [
       main: "readme",
+      source_url: @source_url,
       source_ref: "v#{@version}",
       extras: ["README.md"],
       # Group GameServer.Hooks callbacks by entity (User / Lobby / Group / …)

@@ -392,6 +392,21 @@ defmodule GameServer.Accounts do
 
 
   @doc ~S"""
+    Row count for `list_all_users/2` under the same filters.
+  """
+  @spec count_list_all_users(map()) :: non_neg_integer()
+  def count_list_all_users(_filters) do
+    case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
+      :placeholder ->
+        0
+
+      _ ->
+        raise "GameServer.Accounts.count_list_all_users/1 is a stub - only available at runtime on GameServer"
+    end
+  end
+
+
+  @doc ~S"""
     Count users matching a username/display name query or exact id. Returns integer.
     
   """
@@ -1164,6 +1179,33 @@ defmodule GameServer.Accounts do
 
       _ ->
         raise "GameServer.Accounts.link_device_id/2 is a stub - only available at runtime on GameServer"
+    end
+  end
+
+
+  @doc ~S"""
+    Admin user listing: search across identity fields (or an exact id), optional
+    facet filters, sorting and pagination — the query behind the admin Users page.
+    
+    Distinct from `search_users/2`, the privacy-safe player search: this matches
+    sensitive fields a player cannot, so it is admin-only.
+    
+    `filters` keys (string or atom): `:search` (term or full id), `:facets` (list
+    of `"online"`, `"unactivated"`, and provider names). `opts`: `:page`,
+    `:page_size`, `:sort_field`, `:sort_dir`.
+    
+  """
+  @spec list_all_users(
+  map(),
+  keyword()
+) :: [GameServer.Accounts.User.t()]
+  def list_all_users(_filters, _opts) do
+    case Application.get_env(:game_server_sdk, :stub_mode, :raise) do
+      :placeholder ->
+        []
+
+      _ ->
+        raise "GameServer.Accounts.list_all_users/2 is a stub - only available at runtime on GameServer"
     end
   end
 

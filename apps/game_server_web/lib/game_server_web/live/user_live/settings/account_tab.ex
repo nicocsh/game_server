@@ -377,7 +377,7 @@ defmodule GameServerWeb.UserLive.Settings.AccountTab do
 
     case Accounts.update_user_display_name(user, user_params) do
       {:ok, updated_user} ->
-        updated_scope = %{socket.assigns.current_scope | user: updated_user}
+        updated_scope = socket.assigns.current_scope
 
         {:noreply,
          socket
@@ -407,7 +407,7 @@ defmodule GameServerWeb.UserLive.Settings.AccountTab do
 
     case Accounts.update_username(user, user_params) do
       {:ok, updated_user} ->
-        updated_scope = %{socket.assigns.current_scope | user: updated_user}
+        updated_scope = socket.assigns.current_scope
 
         {:noreply,
          socket

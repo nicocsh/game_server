@@ -4,9 +4,6 @@ defmodule GameServerWeb.AdminLive.Users do
   alias GameServer.Accounts
   alias GameServer.Accounts.User
   alias GameServer.Async
-  alias GameServer.Repo
-
-  import Ecto.Query
 
   @impl true
   def render(assigns) do
@@ -954,7 +951,9 @@ defmodule GameServerWeb.AdminLive.Users do
      |> sync_selected_ids(user_ids(users))}
   end
 
-  # Helper to load users with search + provider filters + sort
+  # Delegates to Accounts.list_all_users/2 (the reusable, admin-scoped context
+  # query) so search/filter/sort logic lives in one place, shared with anything
+  # else that needs an admin user listing.
   defp load_users(
          page,
          page_size,
@@ -963,131 +962,14 @@ defmodule GameServerWeb.AdminLive.Users do
          sort_field \\ "inserted_at",
          sort_dir \\ "desc"
        ) do
-    base = from(u in User)
+    query_filters = %{search: search || "", facets: filters}
+    opts = [page: page, page_size: page_size, sort_field: sort_field, sort_dir: sort_dir]
 
-    search_term = String.trim(search || "")
-
-    base = apply_search(base, search_term)
-    base = apply_provider_filters(base, filters)
-
-    total_count = Repo.one(from u in base, select: count(u.id)) || 0
+    users = Accounts.list_all_users(query_filters, opts)
+    total_count = Accounts.count_list_all_users(query_filters)
     total_pages = if page_size > 0, do: div(total_count + page_size - 1, page_size), else: 0
 
-    order = build_sort_order(sort_field, sort_dir)
-
-    users =
-      Repo.all(
-        from u in base,
-          order_by: ^order,
-          offset: ^((page - 1) * page_size),
-          limit: ^page_size
-      )
-
     {users, total_count, total_pages}
-  end
-
-  defp build_sort_order(field, dir) do
-    direction = if dir == "asc", do: :asc, else: :desc
-
-    case field do
-      "updated_at" -> [{direction, :updated_at}]
-      "last_seen_at" -> [{direction, :last_seen_at}]
-      _ -> [{direction, :inserted_at}]
-    end
-  end
-
-  defp apply_search(base, search_term) do
-    cond do
-      search_term == "" ->
-        base
-
-      Regex.match?(~r/^\d+$/, search_term) ->
-        q = "%#{search_term}%"
-
-        # Direct ID lookup when the term is a valid UUID
-        id_query =
-          try do
-            case Ecto.UUID.cast(search_term) do
-              {:ok, id} -> dynamic([u], u.id == ^id)
-              :error -> dynamic([u], false)
-            end
-          rescue
-            ArgumentError -> dynamic([u], false)
-          end
-
-        text_query =
-          dynamic(
-            [u],
-            fragment("LOWER(?) LIKE LOWER(?)", u.email, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.username, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.display_name, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.device_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.google_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.apple_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.facebook_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.steam_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?)", u.discord_id, ^q)
-          )
-
-        final_query = dynamic([u], ^id_query or ^text_query)
-
-        from u in base, where: ^final_query
-
-      true ->
-        q = "%#{GameServer.Repo.escape_like(search_term)}%"
-
-        from u in base,
-          where:
-            fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.email, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.username, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.display_name, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.device_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.google_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.apple_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.facebook_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.steam_id, ^q) or
-              fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", u.discord_id, ^q)
-    end
-  end
-
-  defp apply_provider_filters(base, filters) do
-    # Separate boolean-column filters from provider filters since they
-    # are boolean column checks rather than non-null string checks.
-    {special_filters, provider_filters} =
-      Enum.split_with(filters, &(&1 in ["online", "unactivated"]))
-
-    base =
-      if "online" in special_filters do
-        from u in base, where: u.is_online == true
-      else
-        base
-      end
-
-    base =
-      if "unactivated" in special_filters do
-        from u in base, where: u.is_activated == false
-      else
-        base
-      end
-
-    conds =
-      provider_filters
-      |> Enum.map(fn
-        "discord" -> dynamic([u], not is_nil(u.discord_id) and u.discord_id != "")
-        "google" -> dynamic([u], not is_nil(u.google_id) and u.google_id != "")
-        "apple" -> dynamic([u], not is_nil(u.apple_id) and u.apple_id != "")
-        "facebook" -> dynamic([u], not is_nil(u.facebook_id) and u.facebook_id != "")
-        "steam" -> dynamic([u], not is_nil(u.steam_id) and u.steam_id != "")
-        "device" -> dynamic([u], not is_nil(u.device_id) and u.device_id != "")
-        "email" -> dynamic([u], not is_nil(u.hashed_password) and u.hashed_password != "")
-      end)
-
-    if conds == [] do
-      base
-    else
-      combined = Enum.reduce(conds, fn c, acc -> dynamic([u], ^acc or ^c) end)
-      from u in base, where: ^combined
-    end
   end
 
   defp user_ids(users) when is_list(users), do: Enum.map(users, & &1.id)

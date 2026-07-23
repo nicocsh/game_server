@@ -41,7 +41,7 @@ defmodule GameServerWeb.GroupChannel do
     current_scope = Map.get(socket.assigns, :current_scope)
 
     with {:ok, group_id} <- Ecto.UUID.cast(group_id_str),
-         %Scope{user: %{id: user_id}} <- current_scope,
+         %Scope{user_id: user_id} <- current_scope,
          true <- Groups.member?(group_id, user_id) do
       # Unsubscribe first to avoid duplicate subscriptions on reconnect
       Groups.unsubscribe_group(group_id)

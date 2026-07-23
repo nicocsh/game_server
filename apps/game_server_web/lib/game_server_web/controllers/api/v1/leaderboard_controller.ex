@@ -475,7 +475,7 @@ defmodule GameServerWeb.Api.V1.LeaderboardController do
   )
 
   def me(conn, %{"id" => id}) do
-    user_id = conn.assigns.current_scope.user.id
+    user_id = conn.assigns.current_scope.user_id
 
     case Leaderboards.get_leaderboard(to_string(id)) do
       nil ->

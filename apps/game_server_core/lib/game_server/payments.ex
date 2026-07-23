@@ -9,6 +9,8 @@ defmodule GameServer.Payments do
   import Ecto.Query, warn: false
   require Logger
 
+  use Nebulex.Caching, cache: GameServer.Cache
+
   alias GameServer.Accounts.User
   alias GameServer.Payments.Entitlement
   alias GameServer.Payments.Product
@@ -31,6 +33,25 @@ defmodule GameServer.Payments do
     DID_CHANGE_RENEWAL_STATUS
   )
 
+  # Cached catalog/ledger reads keyed by per-entity version counters bumped on
+  # every write to that table via tap_bump/2. Products/provider-products change
+  # rarely (kept warm through frequent purchases); purchases have their own
+  # version so a buy doesn't evict the catalog.
+  @payments_cache_ttl_ms 60_000
+  defp product_version, do: GameServer.Cache.get!({:payments, :product_version}) || 1
+
+  defp provider_product_version,
+    do: GameServer.Cache.get!({:payments, :provider_product_version}) || 1
+
+  defp purchase_version, do: GameServer.Cache.get!({:payments, :purchase_version}) || 1
+
+  defp tap_bump({:ok, _} = result, version_key) do
+    _ = GameServer.Cache.bump_version(version_key)
+    result
+  end
+
+  defp tap_bump(other, _version_key), do: other
+
   # ---------------------------------------------------------------------------
   # Catalog
   # ---------------------------------------------------------------------------
@@ -40,6 +61,7 @@ defmodule GameServer.Payments do
     %Product{}
     |> Product.changeset(normalize_params(attrs))
     |> Repo.insert()
+    |> tap_bump({:payments, :product_version})
   end
 
   @spec update_product(Product.t(), map()) :: {:ok, Product.t()} | {:error, Ecto.Changeset.t()}
@@ -47,9 +69,15 @@ defmodule GameServer.Payments do
     product
     |> Product.changeset(normalize_params(attrs))
     |> Repo.update()
+    |> tap_bump({:payments, :product_version})
   end
 
   @spec get_product(Ecto.UUID.t()) :: Product.t() | nil
+  @decorate cacheable(
+              key: {:payments, :product, product_version(), id},
+              match: &(&1 != nil),
+              opts: [ttl: @payments_cache_ttl_ms]
+            )
   def get_product(id), do: Repo.get_uuid(Product, id)
 
   @spec get_product_by_sku(String.t()) :: Product.t() | nil
@@ -71,6 +99,7 @@ defmodule GameServer.Payments do
     %ProviderProduct{}
     |> ProviderProduct.changeset(normalize_params(attrs))
     |> Repo.insert()
+    |> tap_bump({:payments, :provider_product_version})
   end
 
   @spec update_provider_product(ProviderProduct.t(), map()) ::
@@ -80,9 +109,15 @@ defmodule GameServer.Payments do
     provider_product
     |> ProviderProduct.changeset(normalize_params(attrs))
     |> Repo.update()
+    |> tap_bump({:payments, :provider_product_version})
   end
 
   @spec get_provider_product(Ecto.UUID.t()) :: ProviderProduct.t() | nil
+  @decorate cacheable(
+              key: {:payments, :provider_product, provider_product_version(), id},
+              match: &(&1 != nil),
+              opts: [ttl: @payments_cache_ttl_ms]
+            )
   def get_provider_product(id) do
     ProviderProduct
     |> Repo.get_uuid(id)
@@ -147,9 +182,15 @@ defmodule GameServer.Payments do
     %Purchase{}
     |> Purchase.changeset(purchase_attrs)
     |> Repo.insert()
+    |> tap_bump({:payments, :purchase_version})
   end
 
   @spec get_purchase(Ecto.UUID.t()) :: Purchase.t() | nil
+  @decorate cacheable(
+              key: {:payments, :purchase, purchase_version(), id},
+              match: &(&1 != nil),
+              opts: [ttl: @payments_cache_ttl_ms]
+            )
   def get_purchase(id), do: Repo.get_uuid(Purchase, id) |> preload_purchase()
 
   @spec get_purchase_by_order_id(String.t()) :: Purchase.t() | nil
@@ -251,6 +292,7 @@ defmodule GameServer.Payments do
             merge_payload(purchase.raw_provider_payload, attrs["payload"] || %{})
         })
         |> Repo.update()
+        |> tap_bump({:payments, :purchase_version})
 
       entitlements = revoke_entitlements_for_purchase(updated, now, attrs["reason"])
       {updated, entitlements}
@@ -889,6 +931,7 @@ defmodule GameServer.Payments do
         raw_provider_payload: merge_payload(purchase.raw_provider_payload, payload)
       })
       |> Repo.update()
+      |> tap_bump({:payments, :purchase_version})
 
     Logger.warning(
       "Payment checkout failed",
@@ -917,6 +960,7 @@ defmodule GameServer.Payments do
         merge_payload(purchase.raw_provider_payload, %{"stripe_session" => session})
     })
     |> Repo.update()
+    |> tap_bump({:payments, :purchase_version})
   end
 
   defp mark_steam_purchase_requires_action(%Purchase{} = purchase, result) when is_map(result) do
@@ -941,6 +985,7 @@ defmodule GameServer.Payments do
         merge_payload(purchase.raw_provider_payload, %{"steam_init" => result})
     })
     |> Repo.update()
+    |> tap_bump({:payments, :purchase_version})
   end
 
   defp update_purchase_from_validation(%Purchase{} = purchase, validation) do
@@ -963,6 +1008,7 @@ defmodule GameServer.Payments do
     purchase
     |> Purchase.changeset(attrs)
     |> Repo.update()
+    |> tap_bump({:payments, :purchase_version})
   end
 
   defp apply_validated_status(%Purchase{} = purchase, %{"status" => status})
@@ -988,6 +1034,7 @@ defmodule GameServer.Payments do
       raw_provider_payload: merge_payload(purchase.raw_provider_payload, provider_payload)
     })
     |> Repo.update()
+    |> tap_bump({:payments, :purchase_version})
   end
 
   defp grant_purchase(%Purchase{product: %Product{kind: "consumable"}}), do: :ok
@@ -1126,6 +1173,7 @@ defmodule GameServer.Payments do
             })
         })
         |> Repo.update()
+        |> tap_bump({:payments, :purchase_version})
 
       {:ok, :processed}
     end
@@ -1490,6 +1538,7 @@ defmodule GameServer.Payments do
         )
     })
     |> Repo.update()
+    |> tap_bump({:payments, :purchase_version})
     |> case do
       {:ok, updated} -> {:ok, preload_purchase(updated), result}
       {:error, reason} -> {:error, reason}
@@ -1531,6 +1580,7 @@ defmodule GameServer.Payments do
         )
     })
     |> Repo.update()
+    |> tap_bump({:payments, :purchase_version})
   end
 
   defp update_purchase_from_stripe_subscription(
@@ -1558,6 +1608,7 @@ defmodule GameServer.Payments do
         })
     })
     |> Repo.update()
+    |> tap_bump({:payments, :purchase_version})
     |> case do
       {:ok, updated} -> {:ok, preload_purchase(updated)}
       {:error, reason} -> {:error, reason}
@@ -1626,6 +1677,7 @@ defmodule GameServer.Payments do
         })
     })
     |> Repo.update()
+    |> tap_bump({:payments, :purchase_version})
   end
 
   defp stripe_reversal_status(type)
